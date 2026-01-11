@@ -75,6 +75,7 @@ jobs:
           path: dist/**/*.AppImage
 
   release:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     name: Create Release
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
@@ -93,31 +94,68 @@ jobs:
         with:
           path: artifacts
 
-      # Step 1: Create GitHub Release
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Rename Windows installers to include architecture
+        run: |
+          VERSION="0.0.${{ github.run_number }}"
+          echo "Renaming Windows installer files (if necessary) for version $VERSION..."
+          # Find Glyphify setup executables and add arch suffix if the path contains arch information
+          find artifacts -type f -iname "*Glyphify*Setup*.exe" -print0 | while IFS= read -r -d '' f; do
+            dir=$(dirname "$f")
+            base=$(basename "$f")
+            if echo "$dir" | grep -q "/x64/"; then
+              newname="$dir/${base%.*}-x64.exe"
+              echo "Renaming $f -> $newname"
+              mv "$f" "$newname" || true
+            elif echo "$dir" | grep -q "/arm64/"; then
+              newname="$dir/${base%.*}-arm64.exe"
+              echo "Renaming $f -> $newname"
+              mv "$f" "$newname" || true
+            else
+              echo "No arch info detected for $f, leaving as-is"
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          release_name: ${{ steps.tag.outputs.tag }}
-          body: Automated release built from main.
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v0.0.{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build {0} (v0.0.{0})', github.run_number) }}
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 2: Upload .exe and .AppImage assets to the release
-      - name: Upload Release Assets (.exe / .AppImage)
+      - name: Upload installers (.exe / .AppImage)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
-          upload_url="${{ steps.create_release.outputs.upload_url }}"
-          echo "Looking for .exe and .AppImage files to upload..."
-          find artifacts -type f \( -iname "*.exe" -o -iname "*.AppImage" \) -print0 | while IFS= read -r -d '' f; do
-            filename="$(basename "$f")"
-            echo "Uploading $filename..."
-            curl -s -X POST \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$f" \
-              "${upload_url}?name=${filename}"
+          set -euo pipefail
+          echo "Uploading .exe and .AppImage files to the release..."
+          TAG="${{ steps.tag.outputs.tag }}"
+          # enable ** globbing and allow zero matches
+          shopt -s globstar nullglob
+          files=(artifacts/**/*.exe artifacts/**/*.AppImage)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .exe or .AppImage files found to upload"
+          else
+            echo "Uploading: ${files[*]}"
+            gh release upload "$TAG" "${files[@]}" --clobber
+          fi
+
+      - name: Cleanup old releases
+        run: |
+          echo "Fetching all releases..."
+          gh release list --limit 100 --json tagName,createdAt | \
+          jq -r 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' | \
+          while read -r tag; do
+            echo "Deleting old release: $tag"
+            gh release delete "$tag" --yes --cleanup-tag || echo "Failed to delete $tag, continuing..."
           done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
