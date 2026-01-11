@@ -4,28 +4,17 @@
   "description": "A modern Electron desktop application for converting images and videos to ASCII art",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron-forge start",
-    "dev": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
+    "start": "electron .",
+    "dev": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "prepare": "electron-forge import"
+    "build:linux": "electron-builder --linux"
   },
   "author": "KillaMeep",
   "license": "MIT",
   "devDependencies": {
-    "@electron-forge/cli": "^7.10.2",
-    "@electron-forge/maker-deb": "^7.10.2",
-    "@electron-forge/maker-rpm": "^7.10.2",
-    "@electron-forge/maker-squirrel": "^7.10.2",
-    "@electron-forge/maker-zip": "^7.10.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
-    "@electron-forge/plugin-fuses": "^7.10.2",
-    "@electron/fuses": "^1.8.0",
+
     "electron": "^28.1.0",
     "electron-builder": "^26.4.0"
   },
