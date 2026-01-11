@@ -103,6 +103,7 @@ const elements = {
     gifQualitySelect: document.getElementById('gifQualitySelect'),
     resetSettingsBtn: document.getElementById('resetSettingsBtn'),
     settingsSavedIndicator: document.getElementById('settingsSavedIndicator'),
+    checkUpdatesBtn: document.getElementById('checkUpdatesBtn'),
     
 
     
@@ -155,6 +156,38 @@ async function init() {
             }).catch(err => console.error('openExternal error', err));
         }
     });
+
+    // Listen for update events from main and show actionable toast
+    try {
+        window.electronAPI.onUpdateAvailable((payload) => {
+            const msg = `Update ${payload.latestTag} available — click to view release`;
+            const toast = document.createElement('div');
+            toast.className = 'toast update available';
+            toast.innerHTML = `\n                <span class="toast-message">${msg}</span>\n                <button class="toast-action">View release</button>\n                <button class="toast-close">×</button>\n            `;
+            elements.toastContainer.appendChild(toast);
+            const action = toast.querySelector('.toast-action');
+            const close = toast.querySelector('.toast-close');
+            action.addEventListener('click', () => {
+                window.electronAPI.openExternal(payload.url);
+                toast.remove();
+            });
+            close.addEventListener('click', () => toast.remove());
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, 15000);
+        });
+    } catch (e) {
+        console.warn('[Renderer] Updater integration failed:', e);
+    }
+
+    // Update About version text to detected app version
+    (async () => {
+        try {
+            const v = await window.electronAPI.getAppVersion();
+            const el = document.querySelector('.version');
+            if (el) el.textContent = `Version ${v || 'Unknown'}`;
+        } catch (e) {
+            console.warn('[App] getAppVersion failed', e);
+        }
+    })();
 }
 
 // ============================================
@@ -1537,6 +1570,56 @@ function setupSettings() {
         };
         applySettingsToUI();
         showToast('Settings reset to defaults', 'info');
+    });
+
+    // Check for updates button
+    elements.checkUpdatesBtn.addEventListener('click', async () => {
+        try {
+            elements.checkUpdatesBtn.disabled = true;
+            const res = await window.electronAPI.checkForUpdates();
+            elements.checkUpdatesBtn.disabled = false;
+
+            if (res && res.updateAvailable === true) {
+                // actionable toast
+                const msg = `Update ${res.latestTag} available — click to view release`;
+                const toast = document.createElement('div');
+                toast.className = 'toast update-manual';
+                toast.innerHTML = `\n                    <span class="toast-message">${msg}</span>\n                    <button class="toast-action">View release</button>\n                    <button class="toast-close">×</button>\n                `;
+                elements.toastContainer.appendChild(toast);
+                const action = toast.querySelector('.toast-action');
+                const close = toast.querySelector('.toast-close');
+                action.addEventListener('click', () => {
+                    window.electronAPI.openExternal(res.latestUrl);
+                    toast.remove();
+                });
+                close.addEventListener('click', () => toast.remove());
+                setTimeout(() => { if (toast.parentElement) toast.remove(); }, 15000);
+            } else if (res && res.updateAvailable === false) {
+                showToast('No updates available', 'success');
+            } else if (res && res.updateAvailable === null) {
+                const msg = `Latest release: ${res.latestTag} — click to view release`;
+                const toast = document.createElement('div');
+                toast.className = 'toast update-manual';
+                toast.innerHTML = `\n                    <span class="toast-message">${msg}</span>\n                    <button class="toast-action">View release</button>\n                    <button class="toast-close">×</button>\n                `;
+                elements.toastContainer.appendChild(toast);
+                const action = toast.querySelector('.toast-action');
+                const close = toast.querySelector('.toast-close');
+                action.addEventListener('click', () => {
+                    window.electronAPI.openExternal(res.latestUrl);
+                    toast.remove();
+                });
+                close.addEventListener('click', () => toast.remove());
+                setTimeout(() => { if (toast.parentElement) toast.remove(); }, 15000);
+            } else if (res && res.error) {
+                showToast('Update check failed', 'error');
+            } else {
+                showToast('No update information', 'warning');
+            }
+        } catch (e) {
+            elements.checkUpdatesBtn.disabled = false;
+            showToast('Failed to check updates', 'error');
+            console.warn('[Updater] Manual check failed', e);
+        }
     });
     
 }

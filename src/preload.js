@@ -31,6 +31,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     finalizeGif: (gifId, savePath) => ipcRenderer.invoke('gif:finalize', { gifId, savePath }),
     cancelGif: (gifId) => ipcRenderer.invoke('gif:cancel', { gifId }),
 
+    // Updater
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (event, payload) => callback(payload)),
+    // App info
+    getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+
     // Open external URLs in the user's default browser
     openExternal: (url) => ipcRenderer.invoke('open-external', url)
 });

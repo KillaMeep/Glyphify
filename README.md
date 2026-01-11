@@ -8,6 +8,7 @@ A modern Electron desktop application for converting images and videos to ASCII 
 
 ## Features
 
+
 - **Image Conversion**: Convert PNG, JPG, GIF, WebP, and BMP images to ASCII art
 - **Video Conversion**: Convert MP4 and WebM videos to animated ASCII
 - **Multiple Output Modes**: Color and grayscale ASCII output

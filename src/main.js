@@ -39,7 +39,27 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+    await createWindow();
+
+    // Start update checks on startup and every 24 hours
+    try {
+        const updater = require('./update-checker');
+        // Run once on startup (silent = true to avoid noisy logs). Let the updater auto-detect the running version.
+        updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow, silent: true });
+        // Periodic check every 24 hours
+        setInterval(() => {
+            updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
+        }, 24 * 60 * 60 * 1000);
+
+        // Expose manual check via IPC
+        ipcMain.handle('updater:check', async (event) => {
+            return await updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
+        });
+    } catch (e) {
+        console.warn('[Main] Updater failed to initialize:', e);
+    }
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -413,6 +433,16 @@ ipcMain.handle('gif:cancel', async (event, { gifId }) => {
     } catch (err) {
         console.error(`[Main] Error canceling GIF encoder ${gifId}:`, err);
         throw err;
+    }
+});
+
+// Allow renderer to query the packaged/current app version
+ipcMain.handle('app:getVersion', async () => {
+    try {
+        return app.getVersion();
+    } catch (e) {
+        console.warn('[Main] app.getVersion failed:', e && e.message);
+        return null;
     }
 });
 
