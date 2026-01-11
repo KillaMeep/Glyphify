@@ -298,14 +298,14 @@
                     <div class="settings-section">
                         <h3>Performance</h3>
                         <div class="setting-item">
-                            <label>
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="livePreviewCheck" checked>
                                 <span class="checkbox-custom"></span>
                                 Live Preview (may impact performance)
                             </label>
                         </div>
                         <div class="setting-item">
-                            <label>
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="webWorkerCheck" checked>
                                 <span class="checkbox-custom"></span>
                                 Use Web Workers for conversion
@@ -348,7 +348,7 @@
                     <div class="settings-section">
                         <h3>Export</h3>
                         <div class="setting-item">
-                            <label>
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="includeStylesCheck" checked>
                                 <span class="checkbox-custom"></span>
                                 Include styles in HTML export
@@ -375,8 +375,8 @@
                     </div>
 
                     <div class="settings-actions">
+                        <span id="settingsSavedIndicator" class="saved-indicator" aria-live="polite" role="status" hidden>Saved</span>
                         <button class="btn btn-secondary" id="resetSettingsBtn">Reset to Defaults</button>
-                        <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
                     </div>
                 </div>
             </div>

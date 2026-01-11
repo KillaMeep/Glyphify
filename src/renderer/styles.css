@@ -48,40 +48,65 @@
 }
 
 /* Theme Variants */
+/* Keep `dark` family visually consistent but refreshed accents */
 [data-theme="darker"] {
-    --bg-primary: #0d0d1a;
-    --bg-secondary: #0a0a14;
-    --bg-tertiary: #050508;
-    --bg-panel: #12121f;
-    --bg-hover: #1a1a2e;
-    --bg-active: #252540;
+    --bg-primary: #0b0b16;     /* slightly deeper black-blue */
+    --bg-secondary: #080814;
+    --bg-tertiary: #04040a;
+    --bg-panel: #0f0f1f;
+    --bg-hover: #151526;
+    --bg-active: #222233;
+    --accent-primary: #7c5cfb; /* tuned accent */
+    --accent-secondary: #b89bff;
+    --accent-gradient: linear-gradient(135deg,#7c5cfb,#a89bff);
 }
 
+/* Midnight - deep ocean blues with cyan highlights */
 [data-theme="midnight"] {
-    --bg-primary: #1a1f36;
-    --bg-secondary: #141829;
-    --bg-tertiary: #0e111d;
-    --bg-panel: #1f2544;
-    --accent-primary: #4a9eff;
-    --accent-secondary: #7ab8ff;
+    --bg-primary: #071226;
+    --bg-secondary: #061027;
+    --bg-tertiary: #020417;
+    --bg-panel: #0b1630;
+    --bg-hover: #0f2440;
+    --bg-active: #193352;
+
+    --accent-primary: #5cc1ff;
+    --accent-secondary: #7bd6ff;
+    --accent-gradient: linear-gradient(135deg,#5cc1ff,#7b61ff);
+    --accent-glow: rgba(92,193,255,0.18);
+    --border-color: rgba(80,130,200,0.12);
 }
 
+/* Forest - rich green and earthy gradients */
 [data-theme="forest"] {
-    --bg-primary: #1a2e1a;
-    --bg-secondary: #162016;
-    --bg-tertiary: #0f170f;
-    --bg-panel: #1e3f1e;
-    --accent-primary: #4caf50;
-    --accent-secondary: #81c784;
+    --bg-primary: #071910;
+    --bg-secondary: #08170e;
+    --bg-tertiary: #04110a;
+    --bg-panel: #0a2416;
+    --bg-hover: #123224;
+    --bg-active: #1b4a33;
+
+    --accent-primary: #2ed27a;
+    --accent-secondary: #7ef4b8;
+    --accent-gradient: linear-gradient(135deg,#2ed27a,#76e3a1);
+    --accent-glow: rgba(46,210,122,0.14);
+    --border-color: rgba(40,110,70,0.12);
 }
 
+/* Purple - magenta & violet neon vibe */
 [data-theme="purple"] {
-    --bg-primary: #2e1a2e;
-    --bg-secondary: #251625;
-    --bg-tertiary: #1a0f1a;
-    --bg-panel: #3f1e3f;
-    --accent-primary: #9c27b0;
-    --accent-secondary: #ce93d8;
+    --bg-primary: #201025;
+    --bg-secondary: #180816;
+    --bg-tertiary: #120410;
+    --bg-panel: #2a1030;
+    --bg-hover: #34143f;
+    --bg-active: #44165a;
+
+    --accent-primary: #ff6ec7;
+    --accent-secondary: #c78bff;
+    --accent-gradient: linear-gradient(135deg,#ff6ec7,#7b61ff);
+    --accent-glow: rgba(255,110,199,0.14);
+    --border-color: rgba(150,80,170,0.08);
 }
 
 /* Reset & Base */
@@ -592,6 +617,7 @@ body {
 
 /* Checkbox */
 .checkbox-label {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -600,8 +626,18 @@ body {
     color: var(--text-secondary);
 }
 
+/* Visually hide the native checkbox but keep it accessible for keyboard users */
 .checkbox-label input[type="checkbox"] {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .checkbox-custom {
@@ -610,12 +646,14 @@ body {
     background: var(--bg-tertiary);
     border: 2px solid var(--border-light);
     border-radius: var(--radius-sm);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: all var(--transition-fast);
+    cursor: pointer;
 }
 
+/* Checked state */
 .checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
@@ -633,6 +671,12 @@ body {
 
 .checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
     transform: rotate(45deg) scale(1);
+}
+
+/* Focus visible ring when keyboard focusing the checkbox */
+.checkbox-label input[type="checkbox"]:focus + .checkbox-custom {
+    box-shadow: 0 0 0 4px var(--accent-glow, rgba(108,92,231,0.12));
+    outline: none;
 }
 
 /* Color Picker */
@@ -806,6 +850,31 @@ body {
     margin: 0;
     font-size: 13px;
     color: var(--text-secondary);
+}
+
+/* Inline saved indicator for automatic settings saves */
+.saved-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--success);
+    background: rgba(0,0,0,0.06);
+    border: 1px solid rgba(0,0,0,0.06);
+    transition: opacity 180ms var(--transition-fast), transform 180ms var(--transition-fast);
+    opacity: 0;
+    transform: translateY(4px);
+}
+
+.saved-indicator[hidden] {
+    pointer-events: none;
+}
+
+.saved-indicator.show {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .credits a {

@@ -102,7 +102,7 @@ const elements = {
     pngScaleSelect: document.getElementById('pngScaleSelect'),
     gifQualitySelect: document.getElementById('gifQualitySelect'),
     resetSettingsBtn: document.getElementById('resetSettingsBtn'),
-    saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+    settingsSavedIndicator: document.getElementById('settingsSavedIndicator'),
     
 
     
@@ -174,7 +174,20 @@ async function loadSettings() {
 async function saveSettings(showNotification = false) {
     try {
         await window.electronAPI.saveSettings({ settings: state.settings });
-        if (showNotification) showToast('Settings saved', 'success');
+        if (showNotification) {
+            showToast('Settings saved', 'success');
+        } else {
+            // Show small inline saved indicator
+            const el = elements.settingsSavedIndicator;
+            if (el) {
+                el.hidden = false;
+                el.classList.add('show');
+                setTimeout(() => {
+                    el.classList.remove('show');
+                    el.hidden = true;
+                }, 1400);
+            }
+        }
         return { success: true };
     } catch (error) {
         if (showNotification) showToast('Failed to save settings', 'error');
@@ -770,6 +783,8 @@ function setupSlider(slider, valueElement, suffix, decimals = 0) {
             : slider.value;
         valueElement.textContent = value;
         updateConverterOptions();
+        // Persist changes silently
+        if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
     };
     
     slider.addEventListener('input', update);
@@ -1442,6 +1457,7 @@ async function saveAsMP4() {
 // ============================================
 function setupSettings() {
     // Theme
+    // global debounced save for all settings
     const saveSettingsDebounced = debounce(() => saveSettings(false), 300);
     elements.themeSelect.addEventListener('change', (e) => {
         state.settings.theme = e.target.value;
@@ -1449,51 +1465,58 @@ function setupSettings() {
         // Persist theme selection silently
         saveSettingsDebounced();
     });
-
-    // Save button (explicit - show a confirmation toast when clicked)
-    elements.saveSettingsBtn.addEventListener('click', () => saveSettings(true));
     
     // Font
     elements.fontSelect.addEventListener('change', (e) => {
         state.settings.font = e.target.value;
         elements.asciiOutput.style.fontFamily = e.target.value;
+        saveSettingsDebounced();
     });
     
     // Other settings
     elements.livePreviewCheck.addEventListener('change', (e) => {
         state.settings.livePreview = e.target.checked;
+        saveSettingsDebounced();
     });
     
     elements.webWorkerCheck.addEventListener('change', (e) => {
         state.settings.useWebWorker = e.target.checked;
+        saveSettingsDebounced();
     });
     
     elements.previewQualitySelect.addEventListener('change', (e) => {
         state.settings.previewQuality = e.target.value;
+        saveSettingsDebounced();
     });
     
     elements.defaultWidthInput.addEventListener('change', (e) => {
         state.settings.defaultWidth = parseInt(e.target.value);
+        saveSettingsDebounced();
     });
     
     elements.defaultCharsetSelect.addEventListener('change', (e) => {
         state.settings.defaultCharset = e.target.value;
+        saveSettingsDebounced();
     });
     
     elements.defaultModeSelect.addEventListener('change', (e) => {
         state.settings.defaultMode = e.target.value;
+        saveSettingsDebounced();
     });
     
     elements.includeStylesCheck.addEventListener('change', (e) => {
         state.settings.includeStyles = e.target.checked;
+        saveSettingsDebounced();
     });
     
     elements.pngScaleSelect.addEventListener('change', (e) => {
         state.settings.pngScale = parseInt(e.target.value);
+        saveSettingsDebounced();
     });
     
     elements.gifQualitySelect.addEventListener('change', (e) => {
         state.settings.gifQuality = parseInt(e.target.value);
+        saveSettingsDebounced();
     });
     
     // Reset button
@@ -1516,8 +1539,6 @@ function setupSettings() {
         showToast('Settings reset to defaults', 'info');
     });
     
-    // Save button
-    elements.saveSettingsBtn.addEventListener('click', saveSettings);
 }
 
 
