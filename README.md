@@ -36,7 +36,7 @@ A modern Electron desktop application for converting images and videos to ASCII 
 ## Installation
 
 ### Prerequisites
-- Node.js 18 or higher
+- Node.js 24 or higher
 - npm or yarn
 
 ### Setup
@@ -82,29 +82,6 @@ npm run build
    - Set background color
 3. **Convert**: Click "Convert to ASCII" or press Enter
 4. **Export**: Save your ASCII art as text, HTML, or image
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+O` | Open file |
-| `Ctrl+S` | Save output |
-| `Ctrl+C` | Copy to clipboard |
-| `Enter` | Convert |
-| `Esc` | Clear input |
-
-## Settings
-
-
-### Performance
-- **Live Preview**: Toggle real-time updates
-- **Preview Quality**: Low/Medium/High
-
-### Export
-- **Include Styles in HTML**: Embed CSS in HTML exports
-- **PNG Scale Factor**: 1x to 4x resolution
-- **GIF Quality**: Low to High
-
 
 ## License
 
