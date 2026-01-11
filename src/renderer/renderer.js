@@ -146,6 +146,19 @@ async function init() {
     setupSettings();
     setupPresets();
     setupKeyboardShortcuts();
+
+    // Intercept external links and open them in the user's default browser
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a[target="_blank"]');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (href && href.startsWith('http')) {
+            e.preventDefault();
+            window.electronAPI.openExternal(href).then((res) => {
+                if (!res || !res.success) console.warn('openExternal failed', res && res.error);
+            }).catch(err => console.error('openExternal error', err));
+        }
+    });
 }
 
 // ============================================

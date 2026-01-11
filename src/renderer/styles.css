@@ -798,6 +798,37 @@ body {
     border-color: var(--border-light);
 }
 
+/* Credits (About tab) */
+.credits {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.credits a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.credits a svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    opacity: 0.9;
+}
+
+.credits a:hover {
+    color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
 .btn-danger {
     background: #dc3545;
     color: white;

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Muxer, ArrayBufferTarget } = require('mp4-muxer');
@@ -413,5 +413,18 @@ ipcMain.handle('gif:cancel', async (event, { gifId }) => {
     } catch (err) {
         console.error(`[Main] Error canceling GIF encoder ${gifId}:`, err);
         throw err;
+    }
+});
+
+// Open external URLs using the OS default browser
+ipcMain.handle('open-external', async (event, url) => {
+    try {
+        if (!url || typeof url !== 'string') return { success: false, error: 'invalid_url' };
+        console.log(`[Main] open-external -> ${url}`);
+        await shell.openExternal(url);
+        return { success: true };
+    } catch (err) {
+        console.error('[Main] open-external error:', err);
+        return { success: false, error: err.message };
     }
 });

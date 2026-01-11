@@ -29,5 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createGifEncoder: (opts) => ipcRenderer.invoke('gif:create', opts),
     addGifFrames: (gifId, frames) => ipcRenderer.invoke('gif:addFrames', { gifId, frames }),
     finalizeGif: (gifId, savePath) => ipcRenderer.invoke('gif:finalize', { gifId, savePath }),
-    cancelGif: (gifId) => ipcRenderer.invoke('gif:cancel', { gifId })
+    cancelGif: (gifId) => ipcRenderer.invoke('gif:cancel', { gifId }),
+
+    // Open external URLs in the user's default browser
+    openExternal: (url) => ipcRenderer.invoke('open-external', url)
 });
