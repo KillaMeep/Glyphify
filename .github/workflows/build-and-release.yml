@@ -130,32 +130,3 @@ jobs:
             artifacts/**/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload installers (.exe / .AppImage)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "Uploading .exe and .AppImage files to the release..."
-          TAG="${{ steps.tag.outputs.tag }}"
-          # enable ** globbing and allow zero matches
-          shopt -s globstar nullglob
-          files=(artifacts/**/*.exe artifacts/**/*.AppImage)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No .exe or .AppImage files found to upload"
-          else
-            echo "Uploading: ${files[*]}"
-            gh release upload "$TAG" "${files[@]}" --clobber
-          fi
-
-      - name: Cleanup old releases
-        run: |
-          echo "Fetching all releases..."
-          gh release list --limit 100 --json tagName,createdAt | \
-          jq -r 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' | \
-          while read -r tag; do
-            echo "Deleting old release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag || echo "Failed to delete $tag, continuing..."
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
