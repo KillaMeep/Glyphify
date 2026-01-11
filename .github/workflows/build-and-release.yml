@@ -99,11 +99,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 2: Upload all artifacts to the release
-      - name: Upload Release Assets
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts
-          asset_name: artifacts.zip
-          asset_content_type: application/zip
+      # Step 2: Upload .exe and .AppImage assets to the release
+      - name: Upload Release Assets (.exe / .AppImage)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          upload_url="${{ steps.create_release.outputs.upload_url }}"
+          echo "Looking for .exe and .AppImage files to upload..."
+          find artifacts -type f \( -iname "*.exe" -o -iname "*.AppImage" \) -print0 | while IFS= read -r -d '' f; do
+            filename="$(basename "$f")"
+            echo "Uploading $filename..."
+            curl -s -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$f" \
+              "${upload_url}?name=${filename}"
+          done
