@@ -156,3 +156,28 @@ jobs:
             artifacts/Glyphify.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup old releases
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const keep = 3;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const response = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const releases = response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const toDelete = releases.slice(keep);
+            console.log(`Total releases: ${releases.length}. Keeping ${keep}, deleting ${toDelete.length}.`);
+            for (const r of toDelete) {
+              console.log(`Deleting release ${r.id} (${r.tag_name}) created ${r.created_at}`);
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: r.id });
+              // Only remove tag refs for ephemeral build tags we create (prefix "build-") to avoid removing intentional tags
+              if (r.tag_name && r.tag_name.startsWith('build-')) {
+                try {
+                  await github.rest.git.deleteRef({ owner, repo, ref: `tags/${r.tag_name}` });
+                  console.log(`Deleted tag refs/tags/${r.tag_name}`);
+                } catch (err) {
+                  console.warn(`Could not delete tag refs/tags/${r.tag_name}: ${err.message}`);
+                }
+              }
+            }
