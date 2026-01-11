@@ -24,8 +24,8 @@ A modern Electron desktop application for converting images and videos to ASCII 
 
 ## Automatic Installation
 
-- [Download For Linux (AppImage)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.AppImage)
 - [Download For Windows (EXE)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.exe)
+- [Download For Linux (AppImage)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.AppImage)
 
 > Note: These links point directly to the latest release assets, and will download the files immediately.
 
