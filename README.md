@@ -6,6 +6,13 @@ A modern Electron desktop application for converting images and videos to ASCII 
 ![Electron](https://img.shields.io/badge/electron-28.x-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 
+## Download (latest)
+
+- [Download Glyphify.AppImage (latest)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.AppImage)
+- [Download Glyphify.exe (latest)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.exe)
+
+> Note: These links point directly to the latest release assets and will download the files immediately.
+
 ## Features
 
 - **Image Conversion**: Convert PNG, JPG, GIF, WebP, and BMP images to ASCII art
