@@ -11,7 +11,7 @@ A modern Electron desktop application for converting images and videos to ASCII 
 - **Image Conversion**: Convert PNG, JPG, GIF, WebP, and BMP images to ASCII art
 - **Video Conversion**: Convert MP4 and WebM videos to animated ASCII
 - **Multiple Output Modes**: Color and grayscale ASCII output
-- **Customizable Character Sets**: 
+- **Customizable Character Sets**:
   - Standard (@%#*+=-:. )
   - Detailed (70 characters)
   - Block elements
@@ -29,10 +29,10 @@ A modern Electron desktop application for converting images and videos to ASCII 
 
 > Note: These links point directly to the latest release assets, and will download the files immediately.
 
-
 ## Manual Installation
 
 ### Prerequisites
+
 - Node.js 24 or higher
 - npm or yarn
 
@@ -49,7 +49,7 @@ npm install
 npm start
 
 # Run in development mode with DevTools
-npm start -- --dev
+npm start
 ```
 
 ## Building for Distribution
@@ -71,7 +71,7 @@ npm run build
 ## Usage
 
 1. **Load an Image/Video**: Drag and drop a file onto the app, or click "Browse Files"
-2. **Adjust Settings**: 
+2. **Adjust Settings**:
    - Choose color or grayscale mode
    - Select a character set
    - Adjust width, font size, contrast, brightness
@@ -83,5 +83,3 @@ npm run build
 ## License
 
 MIT License - See LICENSE file for details
-
-
