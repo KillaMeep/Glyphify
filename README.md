@@ -43,7 +43,7 @@ A modern Electron desktop application for converting images and videos to ASCII 
 
 ```bash
 # Clone or navigate to the project directory
-cd APP
+cd Glyphify
 
 # Install dependencies
 npm install
