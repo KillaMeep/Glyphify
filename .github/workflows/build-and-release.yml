@@ -115,18 +115,44 @@ jobs:
             fi
           done
 
+      - name: Normalize artifact filenames
+        run: |
+          set -euo pipefail
+          echo "Normalizing artifacts to artifacts/Glyphify.{format}"
+
+          # Prefer setup from x64 build if present, otherwise use first setup found
+          SETUP=$(find artifacts -type f -iname "*Setup*.exe" | grep -i "/x64/" | head -n1 || true)
+          if [ -z "$SETUP" ]; then
+            SETUP=$(find artifacts -type f -iname "*Setup*.exe" | head -n1 || true)
+          fi
+          if [ -n "$SETUP" ]; then
+            echo "Using setup exe: $SETUP"
+            mkdir -p artifacts
+            mv "$SETUP" "artifacts/Glyphify.exe" || true
+          else
+            echo "No setup exe found"
+          fi
+
+          # Pick the first AppImage found
+          APPIMAGE=$(find artifacts -type f -iname "*.AppImage" | head -n1 || true)
+          if [ -n "$APPIMAGE" ]; then
+            echo "Using AppImage: $APPIMAGE"
+            mkdir -p artifacts
+            mv "$APPIMAGE" "artifacts/Glyphify.AppImage" || true
+          else
+            echo "No AppImage found"
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           draft: false
           prerelease: false
-          make_latest: true
           generate_release_notes: true
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v0.0.{0}', github.run_number) }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build {0} (v0.0.{0})', github.run_number) }}
           files: |
-            artifacts/**/*.exe
-            artifacts/**/*.zip
-            artifacts/**/*.AppImage
+            artifacts/Glyphify.exe
+            artifacts/Glyphify.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
