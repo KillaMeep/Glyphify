@@ -38,7 +38,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - run: npm ci
+      - run: npm ci || npm install
 
       - name: Build Windows
         run: npm run build -- --win nsis
@@ -59,7 +59,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - run: npm ci
+      - run: npm ci || npm install
 
       - name: Build Linux
         run: npm run build -- --linux AppImage
