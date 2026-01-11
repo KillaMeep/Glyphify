@@ -33,7 +33,7 @@ const state = {
         gifQuality: 10,
         backgroundColor: '#00000000' // Transparent black
     },
-    customPresets: []
+
 };
 
 // ============================================
@@ -104,10 +104,7 @@ const elements = {
     resetSettingsBtn: document.getElementById('resetSettingsBtn'),
     saveSettingsBtn: document.getElementById('saveSettingsBtn'),
     
-    // Presets
-    presetCards: document.querySelectorAll('.preset-card'),
-    customPresetsList: document.getElementById('customPresetsList'),
-    savePresetBtn: document.getElementById('savePresetBtn'),
+
     
     // Loading
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -144,7 +141,6 @@ async function init() {
     setupControls();
     setupOutput();
     setupSettings();
-    setupPresets();
     setupKeyboardShortcuts();
 
     // Intercept external links and open them in the user's default browser
@@ -169,22 +165,20 @@ async function loadSettings() {
         const saved = await window.electronAPI.loadSettings();
         if (saved) {
             state.settings = { ...state.settings, ...saved.settings };
-            state.customPresets = saved.customPresets || [];
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
     }
 }
 
-async function saveSettings() {
+async function saveSettings(showNotification = false) {
     try {
-        await window.electronAPI.saveSettings({
-            settings: state.settings,
-            customPresets: state.customPresets
-        });
-        showToast('Settings saved', 'success');
+        await window.electronAPI.saveSettings({ settings: state.settings });
+        if (showNotification) showToast('Settings saved', 'success');
+        return { success: true };
     } catch (error) {
-        showToast('Failed to save settings', 'error');
+        if (showNotification) showToast('Failed to save settings', 'error');
+        return { success: false, error: error.message };
     }
 }
 
@@ -224,9 +218,6 @@ function applySettingsToUI() {
     elements.toggleBtns.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === state.settings.defaultMode);
     });
-    
-    // Render custom presets
-    renderCustomPresets();
 }
 
 // ============================================
@@ -1451,10 +1442,16 @@ async function saveAsMP4() {
 // ============================================
 function setupSettings() {
     // Theme
+    const saveSettingsDebounced = debounce(() => saveSettings(false), 300);
     elements.themeSelect.addEventListener('change', (e) => {
         state.settings.theme = e.target.value;
         document.body.setAttribute('data-theme', e.target.value);
+        // Persist theme selection silently
+        saveSettingsDebounced();
     });
+
+    // Save button (explicit - show a confirmation toast when clicked)
+    elements.saveSettingsBtn.addEventListener('click', () => saveSettings(true));
     
     // Font
     elements.fontSelect.addEventListener('change', (e) => {
@@ -1523,168 +1520,7 @@ function setupSettings() {
     elements.saveSettingsBtn.addEventListener('click', saveSettings);
 }
 
-// ============================================
-// Presets
-// ============================================
-function setupPresets() {
-    // Built-in presets
-    elements.presetCards.forEach(card => {
-        card.addEventListener('click', () => {
-            applyPreset(card.dataset.preset);
-        });
-    });
-    
-    // Save preset button
-    elements.savePresetBtn.addEventListener('click', saveCurrentAsPreset);
-}
 
-function applyPreset(presetName) {
-    const presets = {
-        classic: {
-            charset: 'standard',
-            colorMode: 'grayscale',
-            invert: false
-        },
-        blocks: {
-            charset: 'blocks',
-            colorMode: 'color',
-            invert: false
-        },
-        matrix: {
-            charset: 'binary',
-            colorMode: 'color',
-            invert: false,
-            // Special: set green tint
-        },
-        dots: {
-            charset: 'braille',
-            colorMode: 'color',
-            invert: false
-        },
-        minimal: {
-            charset: 'simple',
-            colorMode: 'grayscale',
-            invert: false
-        },
-        detailed: {
-            charset: 'detailed',
-            colorMode: 'color',
-            invert: false
-        }
-    };
-    
-    const preset = presets[presetName];
-    if (!preset) return;
-    
-    // Apply preset values to UI
-    elements.charsetSelect.value = preset.charset;
-    elements.customCharset.classList.add('hidden');
-    elements.invertCheck.checked = preset.invert;
-    
-    // Set color mode
-    elements.toggleBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === preset.colorMode);
-    });
-    
-    updateConverterOptions();
-    
-    if (state.currentFile) {
-        convert();
-    }
-    
-    showToast(`Applied "${presetName}" preset`, 'success');
-}
-
-async function saveCurrentAsPreset() {
-    const name = prompt('Enter preset name:');
-    if (!name) return;
-    
-    const preset = {
-        name,
-        charset: elements.charsetSelect.value,
-        customCharset: elements.customCharset.value,
-        colorMode: document.querySelector('.toggle-btn.active')?.dataset.mode || 'color',
-        width: parseInt(elements.widthSlider.value),
-        fontSize: parseInt(elements.fontSizeSlider.value),
-        lineHeight: parseFloat(elements.lineHeightSlider.value),
-        contrast: parseInt(elements.contrastSlider.value),
-        brightness: parseInt(elements.brightnessSlider.value),
-        invert: elements.invertCheck.checked,
-        backgroundColor: elements.bgColorPicker.value
-    };
-    
-    state.customPresets.push(preset);
-    await saveSettings();
-    renderCustomPresets();
-    showToast(`Preset "${name}" saved`, 'success');
-}
-
-function renderCustomPresets() {
-    if (state.customPresets.length === 0) {
-        elements.customPresetsList.innerHTML = '<p class="no-presets">No custom presets saved yet</p>';
-        return;
-    }
-    
-    elements.customPresetsList.innerHTML = state.customPresets.map((preset, index) => `
-        <div class="custom-preset-item" data-index="${index}">
-            <span class="preset-name">${preset.name}</span>
-            <div class="preset-actions">
-                <button class="btn btn-secondary apply-preset" title="Apply">Apply</button>
-                <button class="btn btn-secondary delete-preset" title="Delete">×</button>
-            </div>
-        </div>
-    `).join('');
-    
-    // Add event listeners
-    elements.customPresetsList.querySelectorAll('.apply-preset').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = e.target.closest('.custom-preset-item').dataset.index;
-            applyCustomPreset(state.customPresets[index]);
-        });
-    });
-    
-    elements.customPresetsList.querySelectorAll('.delete-preset').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const index = e.target.closest('.custom-preset-item').dataset.index;
-            state.customPresets.splice(index, 1);
-            await saveSettings();
-            renderCustomPresets();
-            showToast('Preset deleted', 'info');
-        });
-    });
-}
-
-function applyCustomPreset(preset) {
-    elements.charsetSelect.value = preset.charset;
-    elements.customCharset.value = preset.customCharset || '';
-    elements.customCharset.classList.toggle('hidden', preset.charset !== 'custom');
-    elements.widthSlider.value = preset.width;
-    elements.widthValue.textContent = preset.width;
-    elements.fontSizeSlider.value = preset.fontSize;
-    elements.fontSizeValue.textContent = preset.fontSize;
-    elements.lineHeightSlider.value = preset.lineHeight;
-    elements.lineHeightValue.textContent = preset.lineHeight.toFixed(1);
-    elements.contrastSlider.value = preset.contrast;
-    elements.contrastValue.textContent = preset.contrast;
-    elements.brightnessSlider.value = preset.brightness;
-    elements.brightnessValue.textContent = preset.brightness;
-    elements.invertCheck.checked = preset.invert;
-    elements.bgColorPicker.value = preset.backgroundColor;
-    elements.bgColorText.value = preset.backgroundColor;
-    
-    elements.toggleBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === preset.colorMode);
-    });
-    
-    updateConverterOptions();
-    updateOutputBackground();
-    
-    if (state.currentFile) {
-        convert();
-    }
-    
-    showToast(`Applied "${preset.name}" preset`, 'success');
-}
 
 // ============================================
 // Keyboard Shortcuts
