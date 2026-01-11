@@ -41,7 +41,7 @@ jobs:
       - run: npm install
 
       - name: Build Windows
-        run: npm run build -- --win nsis
+        run: npm run build -- --win nsis --publish=never
 
       - uses: actions/upload-artifact@v4
         with:
@@ -59,10 +59,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Install AppImage dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
+
       - run: npm install
 
       - name: Build Linux
-        run: npm run build -- --linux AppImage
+        run: npm run build -- --linux AppImage --x64 --publish=never
 
       - uses: actions/upload-artifact@v4
         with:
