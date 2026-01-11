@@ -27,7 +27,7 @@
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
     "electron": "^28.1.0",
-    "electron-builder": "^24.11.0"
+    "electron-builder": "^26.4.0"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",
