@@ -89,6 +89,12 @@
                                 <img id="imagePreview" class="media-preview hidden" alt="Preview">
                                 <video id="videoPreview" class="media-preview hidden" loop muted autoplay controls></video>
                                 <div class="media-info" id="mediaInfo"></div>
+
+                                <!-- Playback fallback indicator shown when native playback is not available -->
+                                <div id="playbackFallback" class="fallback-indicator hidden" role="status" aria-live="polite">
+                                    <svg viewBox="0 0 24 24" class="fallback-icon" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" fill="currentColor" opacity="0.95"/></svg>
+                                    <span class="fallback-text">Video playback not supported — using extracted frames</span>
+                                </div>
                             </div>
                         </div>
                     </div>

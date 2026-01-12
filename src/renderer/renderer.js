@@ -359,6 +359,17 @@ async function handleBrowse() {
 }
 
 async function loadFile(file) {
+    // Revoke any temporary object URLs from previous previews
+    try {
+        if (state._tempPreviewObjectUrl) {
+            URL.revokeObjectURL(state._tempPreviewObjectUrl);
+            delete state._tempPreviewObjectUrl;
+        }
+    } catch (e) { /* ignore */ }
+
+    // Reset preview fallback indicator when switching files
+    try { hidePlaybackFallback(); } catch (e) {}
+
     console.log(`[Load] Loading file: ${file.name}, type: ${file.type}`);
     const reader = new FileReader();
     
@@ -409,6 +420,41 @@ async function displayPreview(dataUrl, isVideo, isGif = false) {
         elements.videoPreview.play().catch(err => {
             console.warn('[Preview] Initial autoplay blocked:', err);
         });
+
+        // Quick capability check: if the HTML video element cannot play this MIME, fall back
+        try {
+            const mime = state.currentFile && state.currentFile.type ? state.currentFile.type : null;
+            if (mime && typeof elements.videoPreview.canPlayType === 'function') {
+                const can = elements.videoPreview.canPlayType(mime);
+                if (!can || can === '') {
+                    console.warn('[Preview] Video MIME not supported by video element:', mime);
+                    // Hide video and show image fallback (use object URL for better GIF compatibility)
+                    elements.videoPreview.pause();
+                    elements.videoPreview.classList.add('hidden');
+                    elements.imagePreview.classList.remove('hidden');
+                    (async () => {
+                        try {
+                            const blob = await dataUrlToBlob(dataUrl, mime);
+                            const objUrl = URL.createObjectURL(blob);
+                            // Store to revoke later if needed
+                            state._tempPreviewObjectUrl = objUrl;
+                            elements.imagePreview.src = objUrl;
+                            elements.gifOptions.classList.remove('hidden');
+                            showToast('Video format not supported by native playback; using frame extraction for animation.', 'warning');
+                            showPlaybackFallback('Video playback not supported — using extracted frames');
+                            // Kick off extraction in background to enable animation
+                            startBackgroundProcessing().catch(err => console.warn('[Preview] Background extraction failed:', err));
+                        } catch (err) {
+                            console.warn('[Preview] Fallback image creation failed:', err);
+                            elements.imagePreview.src = dataUrl;
+                        }
+                    })();
+                    return; // Skip onloadedmetadata handlers since video won't be used
+                }
+            }
+        } catch (err) {
+            console.warn('[Preview] Video capability detection failed:', err);
+        }
         
         elements.videoPreview.onloadedmetadata = async () => {
             const duration = elements.videoPreview.duration.toFixed(1);
@@ -639,6 +685,10 @@ function startAnimationPlayback() {
         if (elements.videoPreview.paused) {
             elements.videoPreview.play().catch(err => {
                 console.warn('[Animation] Could not start video:', err);
+                showToast('Video playback not supported — running independent animation.', 'warning');
+                showPlaybackFallback('Video playback not supported — running independent animation');
+                // Fall back to independent timer-based playback
+                startIndependentAnimationPlayback();
             });
         }
 
@@ -652,35 +702,10 @@ function startAnimationPlayback() {
 
         state.animationPlayer = requestAnimationFrame(syncLoop);
         console.log('[Animation] Started video-synced animation loop');
+        // Hide fallback indicator when video-synced playback is running
+        try { hidePlaybackFallback(); } catch (e) {}
     } else {
-        // For standalone animation (no video sync), use timer-based playback
-        let frameIndex = 0;
-        const frames = state.animationEncoder.frames;
-        const frameRate = state.animationEncoder.frameRate || state.animationEncoder?.options?.frameRate || state.sourceFPS || 10;
-        const frameDuration = 1000 / frameRate;
-
-        console.log(`[Animation] Starting independent playback at ${frameRate}fps`);
-
-        function nextFrame() {
-            if (!state.playbackRunning) return; // Stopped
-
-            if (frameIndex >= frames.length) {
-                frameIndex = 0; // Loop
-            }
-
-            const frame = frames[frameIndex];
-                    if (frame && frame.asciiResult) {
-                // Replace content atomically to prevent overlay/ghosting
-                elements.asciiOutput.innerHTML = state.converter.generateDisplayHTML(frame.asciiResult);
-                // Ensure output is visible
-                elements.asciiOutput.classList.remove('hidden');
-            }
-            frameIndex++;
-
-            state.animationPlayer = setTimeout(nextFrame, frameDuration);
-        }
-
-        nextFrame();
+        startIndependentAnimationPlayback();
     }
 }
 
@@ -696,6 +721,45 @@ function stopAnimationPlayback() {
         console.warn('[Animation] Error stopping playback:', e);
     }
     console.log('[Animation] Playback stopped');
+}
+
+function startIndependentAnimationPlayback() {
+    if (!state.animationEncoder || !state.animationEncoder.frames || state.animationEncoder.frames.length === 0) {
+        console.log('[Animation] No frames to play (independent)');
+        return;
+    }
+
+    // Stop any running playback loops and start a timer-based loop
+    stopAnimationPlayback();
+    state.playbackRunning = true;
+
+    let frameIndex = 0;
+    const frames = state.animationEncoder.frames;
+    const frameRate = state.animationEncoder.frameRate || state.animationEncoder?.options?.frameRate || state.sourceFPS || 10;
+    const frameDuration = 1000 / frameRate;
+
+    console.log(`[Animation] Starting independent playback at ${frameRate}fps`);
+
+    function nextFrame() {
+        if (!state.playbackRunning) return; // Stopped
+
+        if (frameIndex >= frames.length) {
+            frameIndex = 0; // Loop
+        }
+
+        const frame = frames[frameIndex];
+        if (frame && frame.asciiResult) {
+            // Replace content atomically to prevent overlay/ghosting
+            elements.asciiOutput.innerHTML = state.converter.generateDisplayHTML(frame.asciiResult);
+            // Ensure output is visible
+            elements.asciiOutput.classList.remove('hidden');
+        }
+        frameIndex++;
+
+        state.animationPlayer = setTimeout(nextFrame, frameDuration);
+    }
+
+    nextFrame();
 }
 
 async function dataUrlToUint8Array(dataUrl) {
@@ -729,6 +793,15 @@ async function dataUrlToUint8Array(dataUrl) {
         const ab = await res.arrayBuffer();
         return new Uint8Array(ab);
     }
+}
+
+async function dataUrlToBlob(dataUrl, mimeType) {
+    // Convert data URL to Uint8Array and wrap as a Blob (useful for creating object URLs)
+    const bytes = await dataUrlToUint8Array(dataUrl);
+    const mt = mimeType || (dataUrl && dataUrl.slice(5, dataUrl.indexOf(';'))) || 'application/octet-stream';
+    // bytes may be a Uint8Array; ensure we pass an ArrayBuffer
+    const buffer = bytes.buffer ? bytes.buffer : (new Uint8Array(bytes)).buffer;
+    return new Blob([buffer], { type: mt });
 }
 
 async function extractFramesWithWorker(dataUrl, frameRate, progressCallback, abortSignal) {
@@ -1645,7 +1718,17 @@ async function displayResult(result, conversionTime, frameCount = null) {
                     });
 
                     // Start video and output playback together
-                    try { await elements.videoPreview.play(); } catch (e) { console.warn('[DisplayResult] Video play failed:', e); }
+                    try { await elements.videoPreview.play(); } catch (e) { 
+                        console.warn('[DisplayResult] Video play failed:', e);
+                        const msg = (e && e.message) ? e.message.toLowerCase() : '';
+                        if (msg.includes('no supported sources') || e.name === 'NotSupportedError' || msg.includes('not supported')) {
+                            showToast('Video playback not supported on this system; using extracted frames for animation.', 'warning');
+                            showPlaybackFallback('Video playback not supported — using extracted frames');
+                            // Start independent/timer-based playback
+                            startIndependentAnimationPlayback();
+                            return;
+                        }
+                    }
                     startAnimationPlayback();
 
                     // Immediately sync one frame to ensure alignment
@@ -2301,6 +2384,24 @@ function showToast(message, type = 'info') {
             setTimeout(() => toast.remove(), 300);
         }
     }, 4000);
+}
+
+function showPlaybackFallback(message = null) {
+    try {
+        if (!elements.playbackFallback) return;
+        if (message) {
+            const textEl = elements.playbackFallback.querySelector('.fallback-text');
+            if (textEl) textEl.textContent = message;
+        }
+        elements.playbackFallback.classList.remove('hidden');
+    } catch (e) { console.warn('[UI] Failed to show playback fallback indicator:', e); }
+}
+
+function hidePlaybackFallback() {
+    try {
+        if (!elements.playbackFallback) return;
+        elements.playbackFallback.classList.add('hidden');
+    } catch (e) { console.warn('[UI] Failed to hide playback fallback indicator:', e); }
 }
 
 // Debounce helper
