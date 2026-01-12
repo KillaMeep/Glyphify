@@ -61,6 +61,7 @@ app.whenReady().then(async () => {
             console.log('[Main] Manual update check requested from renderer');
             const result = await updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
             console.log('[Main] Manual update check result:', result && (result.updateAvailable === true ? `update ${result.latestTag}` : result.error || 'no update'));
+            console.log('[Main] Manual update check current version:', result && result.currentVersion ? result.currentVersion : '(unknown)');
             return result;
         });
     } catch (e) {

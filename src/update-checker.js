@@ -199,15 +199,15 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
         }
       }
 
-      return { updateAvailable: true, latestTag, latestUrl, release: latest };
+      return { updateAvailable: true, latestTag, latestUrl, release: latest, currentVersion: detected };
     }
 
     // up-to-date
     if (!silent) logger.log('[Updater] Already up-to-date');
-    return { updateAvailable: false, latestTag, latestUrl, release: latest };
+    return { updateAvailable: false, latestTag, latestUrl, release: latest, currentVersion: detected };
   } catch (err) {
     logger.warn('[Updater] Check failed:', err && err.message);
-    return { error: err.message };
+    return { error: err.message, currentVersion: detected || null };
   }
 }
 

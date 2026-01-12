@@ -2113,6 +2113,7 @@ function setupSettings() {
             const res = await window.electronAPI.checkForUpdates();
             elements.checkUpdatesBtn.disabled = false;
             console.log('[Updater] Manual check result:', res);
+            console.log('[Updater] Current running version:', res && res.currentVersion ? res.currentVersion : '(unknown)');
 
             if (res && res.updateAvailable === true) {
                 // actionable toast
