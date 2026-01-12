@@ -622,8 +622,25 @@ ipcMain.handle('extract:frames', async (event, payload) => {
         // Prepare temp directory for frames
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'glyphify-extract-'));
 
-        const ffmpegPath = require('ffmpeg-static');
-        const ffprobePath = require('ffprobe-static').path;
+        const ffmpegPathOrig = require('ffmpeg-static');
+        const ffprobePathOrig = require('ffprobe-static').path;
+        // When packaged with asar, binaries may end up inside app.asar which cannot be spawned directly.
+        // Prefer an unpacked copy if available (app.asar.unpacked).
+        const normalizeUnpacked = (p) => {
+            if (!p) return p;
+            try {
+                if (p.includes('app.asar')) {
+                    const candidate = p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+                    if (require('fs').existsSync(candidate)) {
+                        console.log('[Main] Using unpacked binary for path', candidate);
+                        return candidate;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            return p;
+        };
+        let ffmpegPath = normalizeUnpacked(ffmpegPathOrig);
+        let ffprobePath = normalizeUnpacked(ffprobePathOrig);
         const util = require('util');
         const execFile = util.promisify(require('child_process').execFile);
         const spawn = require('child_process').spawn;
