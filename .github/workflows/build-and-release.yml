@@ -41,6 +41,7 @@ jobs:
       - run: npm install
 
       - name: Determine VERSION
+        id: version
         shell: pwsh
         run: |
           # For workflow_dispatch, use provided tag input when present, otherwise use run_number
@@ -50,14 +51,17 @@ jobs:
             $v = "0.0.${{ github.run_number }}"
           }
           Write-Host "Determined VERSION=$v"
+          # Export to GITHUB_ENV for downstream steps and set step output for immediate consumption
           echo "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build Windows
+        shell: pwsh
         env:
-          VERSION: ${{ env.VERSION }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          echo "Building Windows with version $VERSION"
-          npm run build -- --win nsis --config.extraMetadata.version="$VERSION" --publish=never
+          Write-Host "Building Windows with version $env:VERSION"
+          npm run build -- --win nsis --config.extraMetadata.version="$env:VERSION" --publish=never
 
       - uses: actions/upload-artifact@v4
         with:
@@ -83,6 +87,7 @@ jobs:
       - run: npm install
 
       - name: Determine VERSION
+        id: version
         shell: bash
         run: |
           if [ -n "${{ github.event.inputs.tag }}" ]; then
@@ -93,10 +98,11 @@ jobs:
           fi
           echo "Determined VERSION=$V"
           echo "VERSION=$V" >> $GITHUB_ENV
+          echo "version=$V" >> $GITHUB_OUTPUT
 
       - name: Build Linux
         env:
-          VERSION: ${{ env.VERSION }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           echo "Building Linux with version $VERSION"
           npm run build -- --linux AppImage --x64 --config.extraMetadata.version="$VERSION" --publish=never
