@@ -8,7 +8,9 @@ let mainWindow;
 
 function createWindow() {
     console.log('[Main] Creating main window');
-    mainWindow = new BrowserWindow({
+
+    // Try to load saved window state from settings file so we can restore position/size
+    let winOpts = {
         width: 1400,
         height: 900,
         minWidth: 1000,
@@ -22,7 +24,46 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         },
         icon: path.join(__dirname, '../assets/icon.ico')
-    });
+    };
+
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const raw = fs.readFileSync(settingsPath, 'utf-8');
+            const obj = JSON.parse(raw);
+            // The saved structure is typically { settings: { ... } } from renderer
+            const s = obj && obj.settings ? obj.settings : obj;
+            if (s && s.windowState) {
+                const ws = s.windowState;
+                if (ws.width && ws.height) {
+                    winOpts.width = ws.width;
+                    winOpts.height = ws.height;
+                }
+                if (Number.isInteger(ws.x) && Number.isInteger(ws.y)) {
+                    winOpts.x = ws.x;
+                    winOpts.y = ws.y;
+                }
+                console.log('[Main] Restoring window state:', ws);
+            }
+        }
+    } catch (e) {
+        console.warn('[Main] Could not read settings for window state:', e && e.message);
+    }
+
+    mainWindow = new BrowserWindow(winOpts);
+
+    // If previous state was maximized, restore that as well
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const raw = fs.readFileSync(settingsPath, 'utf-8');
+            const obj = JSON.parse(raw);
+            const s = obj && obj.settings ? obj.settings : obj;
+            if (s && s.windowState && s.windowState.isMaximized) {
+                mainWindow.maximize();
+            }
+        }
+    } catch (e) {
+        console.warn('[Main] Could not apply maximized state:', e && e.message);
+    }
 
     mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
 
@@ -33,6 +74,39 @@ function createWindow() {
         console.log('[Main] Opening DevTools (development mode)');
         mainWindow.webContents.openDevTools();
     }
+
+    // Persist window state on close (and when maximize/unmaximize)
+    const saveWindowState = () => {
+        try {
+            const bounds = mainWindow.getBounds();
+            const isMax = mainWindow.isMaximized();
+
+            let current = {};
+            if (fs.existsSync(settingsPath)) {
+                try { current = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) || {}; } catch (e) { current = {}; }
+            }
+
+            const s = current && current.settings ? current.settings : current;
+            s.windowState = {
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+                isMaximized: isMax
+            };
+
+            // If we wrapped the saved settings under { settings: ... }, preserve that shape
+            const out = current && current.settings ? { ...current, settings: s } : s;
+            fs.writeFileSync(settingsPath, JSON.stringify(out, null, 2));
+            console.log('[Main] Saved window state:', s);
+        } catch (e) {
+            console.warn('[Main] Failed to save window state:', e && e.message);
+        }
+    };
+
+    mainWindow.on('close', saveWindowState);
+    mainWindow.on('unmaximize', saveWindowState);
+    mainWindow.on('maximize', saveWindowState);
 
     mainWindow.on('closed', () => {
         mainWindow = null;
