@@ -311,8 +311,11 @@ class ASCIIConverter {
             colorData.push(lineColors);
         }
         
+        // Normalize braille blank (U+2800) to ASCII space for plain text output
+        const textLines = lines.map(l => l.replace(/\u2800/g, ' '));
+
         return {
-            text: lines.join('\n'),
+            text: textLines.join('\n'),
             lines,
             colorData,
             width,
@@ -361,7 +364,8 @@ class ASCIIConverter {
                 const char = line[x];
                 const color = colors[x];
                 
-                if (char === ' ') {
+                if (this.isBlankChar(char)) {
+                    // Treat braille blank as a normal space so spacing is consistent
                     html += ' ';
                 } else {
                     html += `<span style="color:rgb(${color.r},${color.g},${color.b})">${this.escapeHTML(char)}</span>`;
@@ -403,7 +407,7 @@ class ASCIIConverter {
                     ? this.findClosestColor(color.r, color.g, color.b)
                     : `rgb(${color.r},${color.g},${color.b})`;
                 
-                if (char === ' ') {
+                if (this.isBlankChar(char)) {
                     if (currentSpan) {
                         html += `<span style="color:${currentColor}">${currentSpan}</span>`;
                         currentSpan = '';
@@ -439,7 +443,7 @@ class ASCIIConverter {
         
         const fontSize = this.options.fontSize * scale;
         const lineHeight = fontSize * this.options.lineHeight;
-        const charWidth = fontSize * 0.6; // Monospace character width ratio
+        let charWidth = fontSize * 0.6; // Monospace character width ratio
         
         const canvasWidth = lines[0].length * charWidth;
         const canvasHeight = lines.length * lineHeight;
@@ -464,10 +468,18 @@ class ASCIIConverter {
         }
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         
-        // Set font
+        // Set font and measure character width so Braille glyphs render with correct alignment
         ctx.font = `${fontSize}px Consolas, 'Courier New', monospace`;
         ctx.textBaseline = 'top';
-        
+
+        // Measure representative characters to compute accurate char width (supports braille glyphs)
+        const sampleChars = [this.getCharset()[0] || 'M', 'M'];
+        let measuredWidth = 0;
+        for (const c of sampleChars) {
+            measuredWidth = Math.max(measuredWidth, ctx.measureText(c).width);
+        }
+        charWidth = measuredWidth > 0 ? measuredWidth : fontSize * 0.6;
+
         // Draw characters
         for (let y = 0; y < lines.length; y++) {
             const line = lines[y];
@@ -475,7 +487,8 @@ class ASCIIConverter {
             
             for (let x = 0; x < line.length; x++) {
                 const char = line[x];
-                if (char !== ' ') {
+                // Treat Braille Pattern Blank (U+2800) the same as ASCII space to keep alignment
+                if (!this.isBlankChar(char)) {
                     const color = colors[x];
                     ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
                     ctx.fillText(char, x * charWidth, y * lineHeight);
@@ -498,6 +511,15 @@ class ASCIIConverter {
             "'": '&#039;'
         };
         return str.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    /**
+     * Determine whether a character should be treated as a whitespace character
+     * This includes ASCII space and Braille Pattern Blank (U+2800), which should
+     * behave like a normal space for alignment purposes.
+     */
+    isBlankChar(char) {
+        return char === ' ' || char === '\u2800';
     }
 
     /**
