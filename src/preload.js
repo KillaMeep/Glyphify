@@ -37,6 +37,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
 
+    // Video probe (Node-side ffprobe fallback). Accepts a data URL string or Uint8Array-like payload.
+    probeVideoNode: (payload) => ipcRenderer.invoke('probe:video', payload),
+
+    // Frame extraction (Node-side ffmpeg fallback)
+    extractFramesNode: (payload) => ipcRenderer.invoke('extract:frames', payload),
+    // Subscribe to native extraction progress; returns an unsubscribe function
+    onExtractProgress: (callback) => {
+        const handler = (event, payload) => callback(payload);
+        ipcRenderer.on('extract:frames:progress', handler);
+        return () => ipcRenderer.removeListener('extract:frames:progress', handler);
+    },
+    // One-time progress listener for native extraction (the callback will be removed after first call)
+    onExtractProgressOnce: (callback) => {
+        const handler = (event, payload) => {
+            try { callback(payload); } finally { ipcRenderer.removeListener('extract:frames:progress', handler); }
+        };
+        ipcRenderer.on('extract:frames:progress', handler);
+    },
+
     // Open external URLs in the user's default browser
     openExternal: (url) => ipcRenderer.invoke('open-external', url)
 });

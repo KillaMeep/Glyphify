@@ -160,6 +160,7 @@ async function init() {
     // Listen for update events from main and show actionable toast
     try {
         window.electronAPI.onUpdateAvailable((payload) => {
+            console.log('[Renderer] Received update:available payload', payload);
             const msg = `Update ${payload.latestTag} available — click to view release`;
             const toast = document.createElement('div');
             toast.className = 'toast update available';
@@ -363,16 +364,18 @@ async function loadFile(file) {
     
     reader.onload = async (e) => {
         const dataUrl = e.target.result;
-        const isVideo = file.type.startsWith('video/');
+        const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+        const isVideo = file.type.startsWith('video/') || isGif;
         
         state.currentFile = {
             name: file.name,
             type: file.type,
-            data: dataUrl
+            data: dataUrl,
+            isGif: isGif
         };
         state.currentType = isVideo ? 'video' : 'image';
         
-        await displayPreview(dataUrl, isVideo);
+        await displayPreview(dataUrl, isVideo, isGif);
     };
     
     reader.readAsDataURL(file);
@@ -380,13 +383,14 @@ async function loadFile(file) {
 
 async function loadFileFromResult(result) {
     state.currentFile = result;
-    state.currentType = result.type;
+    // result.type may already be 'video' for GIFs returned from main
+    state.currentType = result.isGif ? 'video' : result.type;
     
-    await displayPreview(result.data, result.type === 'video');
+    await displayPreview(result.data, state.currentType === 'video', result.isGif);
 }
 
-async function displayPreview(dataUrl, isVideo) {
-    console.log(`[Preview] Displaying ${isVideo ? 'video' : 'image'} preview`);
+async function displayPreview(dataUrl, isVideo, isGif = false) {
+    console.log(`[Preview] Displaying ${isVideo ? (isGif ? 'GIF' : 'video') : 'image'} preview`);
     // Show preview container
     elements.previewContainer.classList.remove('hidden');
     document.querySelector('.drop-zone-content').classList.add('hidden');
@@ -394,7 +398,7 @@ async function displayPreview(dataUrl, isVideo) {
     // Disable convert until the media preview is ready
     elements.convertBtn.disabled = true;
     
-    if (isVideo) {
+    if (isVideo && !isGif) {
         elements.imagePreview.classList.add('hidden');
         elements.videoPreview.classList.remove('hidden');
         elements.videoPreview.src = dataUrl;
@@ -492,15 +496,14 @@ async function displayPreview(dataUrl, isVideo) {
             console.log(`[Preview] Final detected FPS: ${state.sourceFPS}`);
             
             // Update UI - set frameRate input to detected FPS
-            elements.frameRate.value = state.sourceFPS;
-            
-            elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height} • ${duration}s • ${state.sourceFPS}fps`;
+            if (elements.frameRate) elements.frameRate.value = state.sourceFPS;
+            if (elements.mediaInfo) elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height} • ${duration}s • ${state.sourceFPS}fps`;
             
             console.log(`[Preview] Set frameRate input to ${state.sourceFPS}fps`);
-
-            // Enable convert button once metadata is ready
-            elements.convertBtn.disabled = false;
             
+            // Enable convert button once metadata is ready
+            if (elements.convertBtn) elements.convertBtn.disabled = false;
+
             // Start background frame extraction and conversion
             console.log('[Preview] About to call startBackgroundProcessing...');
             startBackgroundProcessing().catch(err => {
@@ -530,6 +533,56 @@ async function displayPreview(dataUrl, isVideo) {
             console.warn('[Preview] Video autoplay blocked:', err);
             // Video might be blocked by browser, but user can click to play
         });
+    } else if (isVideo && isGif) {
+        // GIF is treated as animation but shown as an image preview
+        elements.videoPreview.pause();
+        elements.videoPreview.classList.add('hidden');
+        elements.imagePreview.classList.remove('hidden');
+        elements.imagePreview.src = dataUrl;
+        elements.gifOptions.classList.remove('hidden');
+
+        elements.imagePreview.onload = () => {
+            try {
+                const width = elements.imagePreview.naturalWidth;
+                const height = elements.imagePreview.naturalHeight;
+                if (elements.mediaInfo) elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height} • duration: unknown`;
+                if (elements.sourceFPS) elements.sourceFPS.textContent = 'Unknown';
+                if (elements.frameRate) elements.frameRate.value = 0;
+                if (elements.convertBtn) elements.convertBtn.disabled = false;
+                console.log('[Preview] GIF image loaded:', state.currentFile.name, `${width}x${height}`);
+
+                // Probe the GIF for FPS and frame count (async). This is lightweight compared to full extraction.
+                (async () => {
+                    try {
+                        console.log('[Preview] Probing GIF for duration...');
+                        const res = await probeVideoWithWorker(state.currentFile.data);
+                        console.log('[Preview] Probe result:', res);
+                        if (res) {
+                            const fps = res.fps || null;
+                            const frames = res.frames || null;
+                            if (frames && fps) {
+                                const duration = frames / fps;
+                                state.videoDuration = duration;
+                                state.sourceFPS = fps;
+                                if (elements.mediaInfo) elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height} • ${duration.toFixed(2)}s • ${fps}fps`;
+                                if (elements.sourceFPS) elements.sourceFPS.textContent = `${fps} fps`;
+                                if (elements.frameRate) elements.frameRate.value = Math.round(fps);
+                                console.log('[Preview] Updated GIF duration and fps from probe:', duration, fps);
+                            } else if (fps) {
+                                state.sourceFPS = fps;
+                                if (elements.sourceFPS) elements.sourceFPS.textContent = `${fps} fps`;
+                                if (elements.mediaInfo) elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height} • fps: ${fps}`;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[Preview] GIF probe failed:', e && e.message);
+                    }
+                })();
+
+            } catch (err) {
+                console.error('[Preview] Error in GIF image onload handler:', err);
+            }
+        };
     } else {
         // Image preview branch
         elements.videoPreview.pause();
@@ -539,10 +592,15 @@ async function displayPreview(dataUrl, isVideo) {
         elements.gifOptions.classList.add('hidden');
         
         elements.imagePreview.onload = () => {
-            const width = elements.imagePreview.naturalWidth;
-            const height = elements.imagePreview.naturalHeight;
-            elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height}`;
-            elements.convertBtn.disabled = false;
+            try {
+                const width = elements.imagePreview.naturalWidth;
+                const height = elements.imagePreview.naturalHeight;
+                if (elements.mediaInfo) elements.mediaInfo.textContent = `${state.currentFile.name} • ${width}x${height}`;
+                if (elements.convertBtn) elements.convertBtn.disabled = false;
+                console.log('[Preview] Image loaded:', state.currentFile.name, `${width}x${height}`);
+            } catch (err) {
+                console.error('[Preview] Error in image onload handler:', err);
+            }
         };
     }
 }
@@ -568,70 +626,393 @@ function startAnimationPlayback() {
         console.log('[Animation] No frames to play');
         return;
     }
-    
+
     console.log(`[Animation] Starting smooth animation playback`);
-    
+
+    // Ensure any previous playback is stopped and UI cleared
+    stopAnimationPlayback();
+    state.playbackRunning = true;
+
     // If there's a video, sync with it using requestAnimationFrame for smooth updates
     if (state.currentType === 'video' && elements.videoPreview.src) {
-        stopAnimationPlayback();
-        
         // Make sure video is playing
         if (elements.videoPreview.paused) {
             elements.videoPreview.play().catch(err => {
                 console.warn('[Animation] Could not start video:', err);
             });
         }
-        
-        // Use requestAnimationFrame for smooth 60fps updates
+
+        // Use requestAnimationFrame for smooth 60fps updates, guard with playbackRunning
         const syncLoop = () => {
-            if (state.animationPlayer === null) return; // Stopped
-            
+            if (!state.playbackRunning) return; // Stopped
+
             syncAnimationToVideo();
             state.animationPlayer = requestAnimationFrame(syncLoop);
         };
-        
+
         state.animationPlayer = requestAnimationFrame(syncLoop);
         console.log('[Animation] Started video-synced animation loop');
     } else {
         // For standalone animation (no video sync), use timer-based playback
-        stopAnimationPlayback();
-        
         let frameIndex = 0;
         const frames = state.animationEncoder.frames;
-        const frameRate = state.animationEncoder.frameRate || 10;
+        const frameRate = state.animationEncoder.frameRate || state.animationEncoder?.options?.frameRate || state.sourceFPS || 10;
         const frameDuration = 1000 / frameRate;
-        
+
         console.log(`[Animation] Starting independent playback at ${frameRate}fps`);
-        
+
         function nextFrame() {
+            if (!state.playbackRunning) return; // Stopped
+
             if (frameIndex >= frames.length) {
                 frameIndex = 0; // Loop
             }
-            
+
             const frame = frames[frameIndex];
-            if (frame && frame.asciiResult) {
+                    if (frame && frame.asciiResult) {
+                // Replace content atomically to prevent overlay/ghosting
                 elements.asciiOutput.innerHTML = state.converter.generateDisplayHTML(frame.asciiResult);
+                // Ensure output is visible
+                elements.asciiOutput.classList.remove('hidden');
             }
             frameIndex++;
-            
+
             state.animationPlayer = setTimeout(nextFrame, frameDuration);
         }
-        
+
         nextFrame();
     }
 }
 
 function stopAnimationPlayback() {
-    if (state.animationPlayer) {
-        // Handle both requestAnimationFrame and setTimeout
-        try {
-            cancelAnimationFrame(state.animationPlayer);
-        } catch (e) {
-            clearTimeout(state.animationPlayer);
+    // Ensure we stop any running playback loop
+    try {
+        if (typeof state.playbackRunning !== 'undefined') state.playbackRunning = false;
+        if (state.animationPlayer) {
+            try { cancelAnimationFrame(state.animationPlayer); } catch (e) { clearTimeout(state.animationPlayer); }
+            state.animationPlayer = null;
         }
-        state.animationPlayer = null;
-        console.log('[Animation] Playback stopped');
+    } catch (e) {
+        console.warn('[Animation] Error stopping playback:', e);
     }
+    console.log('[Animation] Playback stopped');
+}
+
+async function dataUrlToUint8Array(dataUrl) {
+    // Avoid fetch(data:) due to CSP restrictions; decode base64 directly
+    try {
+        const comma = dataUrl.indexOf(',');
+        const meta = comma >= 0 ? dataUrl.slice(0, comma) : '';
+        const payload = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+
+        if (meta && /;base64$/i.test(meta) || /;base64,/.test(dataUrl)) {
+            // base64 -> binary
+            const binary = atob(payload);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        } else {
+            // percent-encoded data (unlikely from FileReader but handle defensively)
+            const decoded = decodeURIComponent(payload);
+            const len = decoded.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = decoded.charCodeAt(i);
+            return bytes;
+        }
+    } catch (err) {
+        console.warn('[dataUrlToUint8Array] fallback to fetch due to decode error:', err);
+        // Last-resort fallback (may be blocked by CSP)
+        const res = await fetch(dataUrl);
+        const ab = await res.arrayBuffer();
+        return new Uint8Array(ab);
+    }
+}
+
+async function extractFramesWithWorker(dataUrl, frameRate, progressCallback, abortSignal) {
+    const data = await dataUrlToUint8Array(dataUrl);
+    return new Promise((resolve, reject) => {
+        const worker = new Worker('frame-extractor-worker.js');
+        let completed = false;
+
+        const onMessage = (e) => {
+            const d = e.data;
+            if (!d || !d.type) return;
+            if (d.type === 'progress') {
+                if (progressCallback && typeof progressCallback === 'function') {
+                    progressCallback(d.current / d.total);
+                }
+            } else if (d.type === 'status') {
+                // optional status logs
+                console.log('[FFmpeg Worker] status:', d.message);
+            } else if (d.type === 'complete') {
+                completed = true;
+                clearTimeout(timer);
+                worker.removeEventListener('message', onMessage);
+                resolve(d.frames);
+                worker.terminate();
+            } else if (d.type === 'error') {
+                clearTimeout(timer);
+                worker.removeEventListener('message', onMessage);
+                reject(new Error(d.message || 'Worker error'));
+                worker.terminate();
+            } else if (d.type === 'aborted') {
+                clearTimeout(timer);
+                worker.removeEventListener('message', onMessage);
+                reject(new Error('AbortError'));
+                worker.terminate();
+            }
+        };
+
+        worker.addEventListener('message', onMessage);
+
+        if (abortSignal) {
+            abortSignal.addEventListener('abort', () => {
+                try { worker.postMessage({ type: 'abort' }); } catch (e) { /* ignore */ }
+                if (!completed) {
+                    clearTimeout(timer);
+                    worker.removeEventListener('message', onMessage);
+                    worker.terminate();
+                    reject(new Error('AbortError'));
+                }
+            }, { once: true });
+        }
+
+        const timer = setTimeout(async () => {
+            if (completed) return;
+            console.warn('[FFmpeg Worker] extraction timed out; attempting Node-side extraction fallback');
+            worker.removeEventListener('message', onMessage);
+            try { worker.terminate(); } catch (e) {}
+
+            // Attempt Node-side extraction using main process ffmpeg
+            try {
+                if (window.electronAPI && typeof window.electronAPI.extractFramesNode === 'function') {
+                    console.log('[Extract] Attempting node-side extraction');
+                    if (elements.outputStatus) elements.outputStatus.textContent = 'Extracting frames (native ffmpeg)...';
+                    const payload = { dataUrl, extension: state.currentFile && state.currentFile.extension ? state.currentFile.extension : undefined, frameRate };
+                    const nodeRes = await window.electronAPI.extractFramesNode(payload);
+                    console.log('[Extract] Node extraction response:', nodeRes);
+
+                    if (nodeRes && nodeRes.success && Array.isArray(nodeRes.frames)) {
+                        // Convert node frames (pixels Buffer) into ImageData objects to match worker output
+                        const converted = [];
+
+                        // Hook up progress listener for native extraction events (if provided)
+                        let progressListener = null;
+                        try {
+                            if (window.electronAPI && typeof window.electronAPI.onExtractProgressOnce === 'function') {
+                                progressListener = (p) => {
+                                    if (progressCallback && typeof progressCallback === 'function') {
+                                        const percent = (typeof p.percent === 'number') ? (p.percent / 100) : null;
+                                        if (percent !== null) progressCallback(percent);
+                                    }
+                                };
+                                window.electronAPI.onExtractProgressOnce(progressListener);
+                            }
+                        } catch (e) {
+                            console.warn('[Extract] Failed to attach progress listener', e);
+                        }
+
+                        for (let i = 0; i < nodeRes.frames.length; i++) {
+                            const nf = nodeRes.frames[i];
+                            try {
+                                const pixels = nf.pixels; // Uint8Array or Buffer
+                                const width = nf.width;
+                                const height = nf.height;
+                                const delay = nf.delay || Math.round(1000 / (frameRate || 25));
+
+                                const clamped = new Uint8ClampedArray(pixels);
+                                const imageData = new ImageData(clamped, width, height);
+                                converted.push({ imageData, width, height, delay });
+                            } catch (err) {
+                                console.warn('[Extract] Failed to convert node frame', err);
+                            }
+                        }
+
+                                // Detach progress listener
+                        try {
+                            if (removeProgressListener && typeof removeProgressListener === 'function') {
+                                removeProgressListener();
+                            }
+                        } catch (e) {}
+
+                        clearTimeout(timer);
+                        resolve(converted);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('[Extract] Node-side extraction failed:', err);
+            }
+
+            reject(new Error('Extraction timed out'));
+        }, 20000); // 20s timeout before falling back to node
+
+        try {
+            worker.postMessage({ type: 'extract', videoData: data, frameRate: frameRate }, [data.buffer]);
+        } catch (err) {
+            clearTimeout(timer);
+            worker.removeEventListener('message', onMessage);
+            worker.terminate();
+            reject(err);
+        }
+    });
+}
+
+// Probe video/GIF metadata (FPS and frame count) using the worker
+async function probeVideoWithWorker(dataUrl, timeoutMs = 9000) {
+    const data = await dataUrlToUint8Array(dataUrl);
+
+    // Try Node-side ffprobe first (fast native probe) when available
+    try {
+        if (window.electronAPI && typeof window.electronAPI.probeVideoNode === 'function') {
+            try {
+                console.log('[Probe] Trying node ffprobe first (before worker)');
+                const early = await window.electronAPI.probeVideoNode({ dataUrl, extension: state.currentFile && state.currentFile.extension ? state.currentFile.extension : undefined });
+                console.log('[Probe] Node early probe result:', early);
+                if (early && early.success) {
+                    return { fps: early.fps, frames: early.frames };
+                }
+            } catch (err) {
+                console.warn('[Probe] Node early probe failed:', err);
+            }
+        }
+    } catch (err) {
+        console.warn('[Probe] Node probe availability check failed:', err);
+    }
+
+    return new Promise((resolve, reject) => {
+        const worker = new Worker('frame-extractor-worker.js');
+        let finished = false;
+
+        const onMessage = (e) => {
+            const d = e.data;
+            if (!d || !d.type) return;
+            if (d.type === 'status') {
+                console.log('[Probe Worker] status:', d.message);
+                return;
+            }
+            if (d.type === 'probe-complete') {
+                finished = true;
+                clearTimeout(timer);
+                worker.removeEventListener('message', onMessage);
+                worker.terminate();
+                resolve({ fps: d.fps, frames: d.frames });
+            } else if (d.type === 'probe-error') {
+                finished = true;
+                clearTimeout(timer);
+                worker.removeEventListener('message', onMessage);
+                worker.terminate();
+                reject(new Error(d.message || 'Probe error'));
+            }
+        };
+
+        worker.addEventListener('message', onMessage);
+
+        const timer = setTimeout(async () => {
+            if (finished) return;
+            console.warn('[Probe Worker] probe timed out; attempting Node-side ffprobe fallback');
+            worker.removeEventListener('message', onMessage);
+            try { worker.terminate(); } catch (e) {}
+
+            // Try Node-side ffprobe in main process (if available)
+            try {
+                if (window.electronAPI && typeof window.electronAPI.probeVideoNode === 'function') {
+                    console.log('[Probe] Attempting node-side ffprobe fallback');
+                    const payload = { dataUrl: dataUrl };
+                    if (state.currentFile && state.currentFile.extension) payload.extension = state.currentFile.extension;
+                    const nodeRes = await window.electronAPI.probeVideoNode(payload);
+                    console.log('[Probe] Node probe response:', nodeRes);
+                    if (nodeRes && nodeRes.success) {
+                        finished = true;
+                        clearTimeout(timer);
+                        worker.removeEventListener('message', onMessage);
+                        try { worker.terminate(); } catch (e) {}
+                        resolve({ fps: nodeRes.fps, frames: nodeRes.frames });
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('[Probe] Node-side probe failed:', err);
+            }
+
+            // Fallback: give up
+            resolve(null);
+        }, timeoutMs);
+
+        try {
+            console.log('[Probe] Posting probe message to worker');
+            worker.postMessage({ type: 'probe', videoData: data }, [data.buffer]);
+        } catch (err) {
+            clearTimeout(timer);
+            worker.removeEventListener('message', onMessage);
+            worker.terminate();
+            reject(err);
+        }
+    });
+}
+
+async function extractFramesNativePreferred(dataUrl, frameRate, progressCallback, abortSignal) {
+    // Prefer node-side extraction for GIFs and large files for reliability
+    try {
+        if (abortSignal && abortSignal.aborted) throw new Error('AbortError');
+        if (window.electronAPI && typeof window.electronAPI.extractFramesNode === 'function') {
+            console.log('[Extract] Using native ffmpeg extraction (preferred)');
+            if (elements.outputStatus) elements.outputStatus.textContent = 'Extracting frames (native ffmpeg)...';
+            const payload = { dataUrl, frameRate, extension: state.currentFile && state.currentFile.extension ? state.currentFile.extension : undefined };
+
+            // Hook up continuous progress listener (remove after extraction)
+            let removeProgressListener = null;
+            try {
+                if (window.electronAPI && typeof window.electronAPI.onExtractProgress === 'function') {
+                    removeProgressListener = window.electronAPI.onExtractProgress((p) => {
+                        try {
+                            if (progressCallback && typeof progressCallback === 'function') {
+                                if (typeof p.percent === 'number') progressCallback(p.percent / 100);
+                            }
+                        } catch (innerErr) {
+                            console.warn('[Extract] Progress callback error:', innerErr);
+                        }
+                    });
+                }
+            } catch (e) { console.warn('[Extract] Failed to attach native progress listener', e); }
+
+            const nodeRes = await window.electronAPI.extractFramesNode(payload);
+            console.log('[Extract] Native extraction response:', nodeRes);
+            if (nodeRes && nodeRes.success && Array.isArray(nodeRes.frames)) {
+                const converted = [];
+                for (let i = 0; i < nodeRes.frames.length; i++) {
+                    const nf = nodeRes.frames[i];
+                    const pixels = nf.pixels;
+                    const width = nf.width;
+                    const height = nf.height;
+                    const delay = nf.delay || Math.round(1000 / (frameRate || 25));
+
+                    const clamped = new Uint8ClampedArray(pixels);
+                    const imageData = new ImageData(clamped, width, height);
+                    converted.push({ imageData, width, height, delay });
+
+                    // call progress callback per frame for better UI responsiveness
+                    if (progressCallback && typeof progressCallback === 'function') {
+                        progressCallback((i + 1) / nodeRes.frames.length);
+                    }
+
+                    if (abortSignal && abortSignal.aborted) throw new Error('AbortError');
+                }
+
+                if (elements.outputStatus) elements.outputStatus.textContent = '';
+                return converted;
+            }
+        }
+    } catch (err) {
+        if (err && err.message === 'AbortError') throw err;
+        console.warn('[Extract] Native extraction failed or not available, falling back to worker:', err);
+    }
+
+    // Fallback to worker extraction
+    return extractFramesWithWorker(dataUrl, frameRate, progressCallback, abortSignal);
 }
 
 async function startBackgroundProcessing() {
@@ -656,25 +1037,51 @@ async function startBackgroundProcessing() {
     
     try {
         elements.outputStatus.textContent = 'Extracting frames...';
-        const extractor = new VideoExtractor(elements.videoPreview);
-        // Create an abort controller for extraction and tie it to global state so UI abort button works
-        state.abortController = new AbortController();
-        const videoFrames = await extractor.extractFrames(frameRate, (progress) => {
-            const percent = Math.round(progress * 100);
-            elements.outputStatus.textContent = `Extracting frames: ${percent}%`;
-            updateProgressWithTime(percent, totalStart);
-        }, state.abortController.signal);
-        
-        // Cache the raw video frames
-        state.frameCache = {
-            frameRate: frameRate,
-            videoFrames: videoFrames,
-            duration: state.videoDuration
-        };
-        
-        elements.outputStatus.textContent = `Ready - ${videoFrames.length} frames extracted`;
-        console.log(`[Background] Extracted ${videoFrames.length} raw frames with DOM extraction`);
-        showToast('Video frames extracted and ready', 'success');
+        // If this is a GIF file, use native extraction (preferred) to extract frames from the gif bytes
+        if (state.currentFile && state.currentFile.isGif) {
+            const abortCtrl = new AbortController();
+            state.abortController = abortCtrl;
+            const frames = await extractFramesNativePreferred(state.currentFile.data, frameRate > 0 ? frameRate : null, (p) => {
+                const percent = Math.round(p * 100);
+                elements.outputStatus.textContent = `Extracting frames: ${percent}%`;
+                updateProgressWithTime(percent, totalStart);
+            }, abortCtrl.signal);
+
+            // Determine effective frameRate and duration from frames
+            const effectiveFrameRate = frames && frames.length && frames[0] && frames[0].delay ? Math.round(1000 / frames[0].delay) : (frameRate || 25);
+            const duration = frames.reduce((acc, f) => acc + (f.delay || (1000 / effectiveFrameRate)), 0) / 1000;
+
+            // Cache
+            state.frameCache = {
+                frameRate: effectiveFrameRate,
+                videoFrames: frames,
+                duration: duration
+            };
+
+            elements.outputStatus.textContent = `Ready - ${frames.length} frames extracted`;
+            console.log(`[Background] Extracted ${frames.length} frames`);
+            showToast('GIF frames extracted and ready', 'success');
+        } else {
+            const extractor = new VideoExtractor(elements.videoPreview);
+            // Create an abort controller for extraction and tie it to global state so UI abort button works
+            state.abortController = new AbortController();
+            const videoFrames = await extractor.extractFrames(frameRate, (progress) => {
+                const percent = Math.round(progress * 100);
+                elements.outputStatus.textContent = `Extracting frames: ${percent}%`;
+                updateProgressWithTime(percent, totalStart);
+            }, state.abortController.signal);
+            
+            // Cache the raw video frames
+            state.frameCache = {
+                frameRate: frameRate,
+                videoFrames: videoFrames,
+                duration: state.videoDuration
+            };
+            
+            elements.outputStatus.textContent = `Ready - ${videoFrames.length} frames extracted`;
+            console.log(`[Background] Extracted ${videoFrames.length} raw frames with DOM extraction`);
+            showToast('Video frames extracted and ready', 'success');
+        }
     } catch (error) {
         console.error('[Background] Extraction error:', error);
         if (error && error.name === 'AbortError') {
@@ -709,13 +1116,14 @@ function clearInput() {
     document.querySelector('.drop-zone-content').classList.remove('hidden');
     elements.imagePreview.src = '';
     elements.videoPreview.src = '';
-    elements.mediaInfo.textContent = '';
+    if (elements.mediaInfo) elements.mediaInfo.textContent = '';
     
     // Reset output
-    elements.asciiOutput.innerHTML = '';
-    elements.asciiOutput.classList.add('hidden');
-    document.querySelector('.output-placeholder').classList.remove('hidden');
-    elements.outputStatus.textContent = '';
+    if (elements.asciiOutput) elements.asciiOutput.innerHTML = '';
+    if (elements.asciiOutput) elements.asciiOutput.classList.add('hidden');
+    const placeholder = document.querySelector('.output-placeholder');
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (elements.outputStatus) elements.outputStatus.textContent = '';
     
     // Reset export format to image defaults
     updateExportFormats(false);
@@ -879,9 +1287,24 @@ async function convert() {
     console.log('[Convert] Starting conversion, type:', state.currentType);
     
     showLoading('Converting to ASCII...');
+    // Stop any previous animations and clear previous output to avoid overlay issues
+    try {
+        stopAnimationPlayback();
+        state.asciiResult = null;
+        state.animationEncoder = null;
+        if (elements.asciiOutput) elements.asciiOutput.innerHTML = '';
+        const placeholder = document.querySelector('.output-placeholder');
+        if (placeholder) placeholder.classList.remove('hidden');
+        if (elements.asciiOutput) elements.asciiOutput.classList.add('hidden');
+        if (elements.outputStatus) elements.outputStatus.textContent = '';
+    } catch (e) {
+        console.warn('[Convert] Failed to clear previous output:', e);
+    }
+
     updateConverterOptions();
     updateConversionProgress(0, 'Converting to ASCII...');
     
+    const conversionStart = performance.now();
     try {
         if (state.currentType === 'video') {
             await convertVideo();
@@ -889,6 +1312,15 @@ async function convert() {
             await convertImage();
         }
         console.log('[Convert] Conversion completed successfully');
+        // Sync output with input/video now that conversion is finished
+        try {
+            const conversionTime = performance.now() - conversionStart;
+            if (state.animationEncoder && state.animationEncoder.frames && state.animationEncoder.frames.length > 0) {
+                await displayResult(state.asciiResult, conversionTime, state.animationEncoder.frames.length);
+            }
+        } catch (e) {
+            console.warn('[Convert] displayResult sync failed:', e);
+        }
     } catch (error) {
         console.error('[Convert] CONVERSION FAILED:', error);
         console.error('[Convert] Error stack:', error.stack);
@@ -915,7 +1347,7 @@ async function convertImage() {
     const endTime = performance.now();
     updateConversionProgress(100, 'Converting image...');
     
-    displayResult(state.asciiResult, endTime - startTime);
+    await displayResult(state.asciiResult, endTime - startTime);
 }
 
 async function convertVideo() {
@@ -1038,53 +1470,104 @@ async function convertVideo() {
             
             // Extract frames first and cache them
             console.log('[Convert] Extracting frames to cache...');
-            const extractor = new VideoExtractor(video);
-            const videoFrames = await extractor.extractFrames(
-                frameRate,
-                (progress) => {
-                    if (state.abortController.signal.aborted) {
-                        const ae = new Error('Aborted by user'); ae.name = 'AbortError'; throw ae;
-                    }
-                    const percent = progress * 50;
+
+            if (state.currentFile && state.currentFile.isGif) {
+                // Use native ffmpeg extraction (preferred) to extract frames from GIF bytes
+                const abortCtrl = new AbortController();
+                state.abortController = abortCtrl;
+                const gifFrames = await extractFramesNativePreferred(state.currentFile.data, frameRate > 0 ? frameRate : null, (p) => {
+                    const percent = Math.round(p * 100);
                     updateConversionProgress(percent, 'Extracting frames...');
-                },
-                state.abortController.signal
-            );
-            
-            // Cache the extracted frames
-            state.frameCache = {
-                frameRate: frameRate,
-                videoFrames: videoFrames,
-                duration: state.videoDuration
-            };
-            console.log(`[Convert] Cached ${videoFrames.length} frames`);
-            
-            // Now convert to ASCII
-            state.animationEncoder.frames = [];
-            for (let i = 0; i < videoFrames.length; i++) {
-                if (state.abortController.signal.aborted) {
-                    throw new Error('Aborted by user');
+                }, abortCtrl.signal);
+
+                // Derive effective frameRate and duration
+                const effectiveFPS = gifFrames.length && gifFrames[0] && gifFrames[0].delay ? Math.round(1000 / gifFrames[0].delay) : (frameRate || 25);
+                const duration = gifFrames.reduce((acc, f) => acc + (f.delay || Math.floor(1000 / effectiveFPS)), 0) / 1000;
+
+                // Cache
+                state.frameCache = {
+                    frameRate: effectiveFPS,
+                    videoFrames: gifFrames,
+                    duration: duration
+                };
+                console.log(`[Convert] Cached ${gifFrames.length} GIF frames`);
+
+                // Now convert to ASCII
+                state.animationEncoder.frames = [];
+                for (let i = 0; i < gifFrames.length; i++) {
+                    if (state.abortController.signal.aborted) {
+                        throw new Error('Aborted by user');
+                    }
+                    const asciiResult = state.converter.convertImageData(
+                        gifFrames[i].imageData,
+                        gifFrames[i].width,
+                        gifFrames[i].height
+                    );
+                    const asciiCanvas = state.converter.renderToCanvas(asciiResult, state.settings.pngScale);
+
+                    state.animationEncoder.frames.push({
+                        canvas: asciiCanvas,
+                        asciiResult: asciiResult,
+                        delay: gifFrames[i].delay
+                    });
+
+                    const progress = 50 + ((i + 1) / gifFrames.length * 50);
+                    updateConversionProgress(progress, 'Converting to ASCII...');
+
+                    // Yield to UI every 10 frames to allow progress updates
+                    if (i % 10 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
                 }
-                
-                const asciiResult = state.converter.convertImageData(
-                    videoFrames[i].imageData,
-                    videoFrames[i].width,
-                    videoFrames[i].height
+            } else {
+                const extractor = new VideoExtractor(video);
+                const videoFrames = await extractor.extractFrames(
+                    frameRate,
+                    (progress) => {
+                        if (state.abortController.signal.aborted) {
+                            const ae = new Error('Aborted by user'); ae.name = 'AbortError'; throw ae;
+                        }
+                        const percent = progress * 50;
+                        updateConversionProgress(percent, 'Extracting frames...');
+                    },
+                    state.abortController.signal
                 );
-                const asciiCanvas = state.converter.renderToCanvas(asciiResult, state.settings.pngScale);
                 
-                state.animationEncoder.frames.push({
-                    canvas: asciiCanvas,
-                    asciiResult: asciiResult,
-                    delay: videoFrames[i].delay
-                });
+                // Cache the extracted frames
+                state.frameCache = {
+                    frameRate: frameRate,
+                    videoFrames: videoFrames,
+                    duration: state.videoDuration
+                };
+                console.log(`[Convert] Cached ${videoFrames.length} frames`);
                 
-                const progress = 50 + ((i + 1) / videoFrames.length * 50);
-                updateConversionProgress(progress, 'Converting to ASCII...');
-                
-                // Yield to UI every 10 frames to allow progress updates
-                if (i % 10 === 0) {
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                // Now convert to ASCII
+                state.animationEncoder.frames = [];
+                for (let i = 0; i < videoFrames.length; i++) {
+                    if (state.abortController.signal.aborted) {
+                        throw new Error('Aborted by user');
+                    }
+                    
+                    const asciiResult = state.converter.convertImageData(
+                        videoFrames[i].imageData,
+                        videoFrames[i].width,
+                        videoFrames[i].height
+                    );
+                    const asciiCanvas = state.converter.renderToCanvas(asciiResult, state.settings.pngScale);
+                    
+                    state.animationEncoder.frames.push({
+                        canvas: asciiCanvas,
+                        asciiResult: asciiResult,
+                        delay: videoFrames[i].delay
+                    });
+                    
+                    const progress = 50 + ((i + 1) / videoFrames.length * 50);
+                    updateConversionProgress(progress, 'Converting to ASCII...');
+                    
+                    // Yield to UI every 10 frames to allow progress updates
+                    if (i % 10 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
                 }
             }
         }
@@ -1098,20 +1581,37 @@ async function convertVideo() {
     }
     
     // Get the first frame for preview
-    video.currentTime = 0;
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    state.asciiResult = state.converter.convertVideoFrame(video);
-    state.asciiResult.isAnimation = true;
-    state.asciiResult.frameCount = state.animationEncoder.frames.length;
-    state.asciiResult.frameRate = frameRate;
+    if (state.currentFile && state.currentFile.isGif) {
+        // Use the first extracted GIF frame imageData for preview
+        const first = state.animationEncoder.frames[0];
+        if (first && first.asciiResult) {
+            state.asciiResult = first.asciiResult;
+        } else if (first && first.canvas) {
+            // render to get asciiResult if needed
+            state.asciiResult = state.converter.convertImageData(first.imageData || first.canvas, first.width, first.height);
+        } else {
+            // Fallback: show generic message
+            state.asciiResult = { text: '', width: 0, height: 0 };
+        }
+        state.asciiResult.isAnimation = true;
+        state.asciiResult.frameCount = state.animationEncoder.frames.length;
+        state.asciiResult.frameRate = state.frameCache ? state.frameCache.frameRate : frameRate;
+    } else {
+        video.currentTime = 0;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        state.asciiResult = state.converter.convertVideoFrame(video);
+        state.asciiResult.isAnimation = true;
+        state.asciiResult.frameCount = state.animationEncoder.frames.length;
+        state.asciiResult.frameRate = frameRate;
+    }
     
     const endTime = performance.now();
     
     displayResult(state.asciiResult, endTime - startTime, state.animationEncoder.frames.length);
 }
 
-function displayResult(result, conversionTime, frameCount = null) {
+async function displayResult(result, conversionTime, frameCount = null) {
     // Hide placeholder
     document.querySelector('.output-placeholder').classList.add('hidden');
     
@@ -1127,8 +1627,41 @@ function displayResult(result, conversionTime, frameCount = null) {
     let status = `${result.width}x${result.height} characters • ${conversionTime.toFixed(0)}ms`;
     if (frameCount) {
         status += ` • ${frameCount} frames • Playing`;
-        // Start animation playback
-        startAnimationPlayback();
+        // Stop any previous playback and start fresh, then sync to input (video) if present
+        try {
+            stopAnimationPlayback();
+
+            if (state.currentType === 'video' && elements.videoPreview && elements.videoPreview.src) {
+                // Force both input (video) and output to start together from 0s for side-by-side sync
+                try {
+                    // Pause and seek to 0, wait for seek to complete, then play both
+                    elements.videoPreview.pause();
+                    await new Promise((resolve) => {
+                        const onSeeked = () => { elements.videoPreview.removeEventListener('seeked', onSeeked); resolve(); };
+                        elements.videoPreview.addEventListener('seeked', onSeeked);
+                        try { elements.videoPreview.currentTime = 0; } catch (e) { elements.videoPreview.removeEventListener('seeked', onSeeked); resolve(); }
+                        // Safety timeout
+                        setTimeout(resolve, 250);
+                    });
+
+                    // Start video and output playback together
+                    try { await elements.videoPreview.play(); } catch (e) { console.warn('[DisplayResult] Video play failed:', e); }
+                    startAnimationPlayback();
+
+                    // Immediately sync one frame to ensure alignment
+                    try { syncAnimationToVideo(); } catch (e) { console.warn('[DisplayResult] Failed to sync animation to video:', e); }
+                } catch (e) {
+                    console.warn('[DisplayResult] Failed to sync and start video+output:', e);
+                    // Fallback: just start animation playback
+                    startAnimationPlayback();
+                }
+            } else {
+                // Non-video: just start playback
+                startAnimationPlayback();
+            }
+        } catch (e) {
+            console.warn('[DisplayResult] Failed to start animation playback:', e);
+        }
     }
     elements.outputStatus.textContent = status;
     
@@ -1262,7 +1795,7 @@ async function saveAsGIF() {
     state.abortController = new AbortController();
     
     try {
-        const startTime = Date.now();
+        const startTime = performance.now();
         const blob = await state.animationEncoder.encodeGIF((progress) => {
             if (state.abortController.signal.aborted) {
                 throw new Error('Aborted by user');
@@ -1339,7 +1872,7 @@ async function saveAsWebM() {
     
     console.log(`[Export] Encoding ${state.animationEncoder.frames.length} frames to WebM`);
     showLoading('Preparing to encode WebM...');
-    state.progressStartTime = Date.now();
+    state.progressStartTime = performance.now();
     
     // Small delay to ensure loading overlay renders
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -1412,7 +1945,7 @@ async function saveAsMP4() {
     
     console.log(`[Export] Encoding ${state.animationEncoder.frames.length} frames to MP4`);
     showLoading('Preparing to encode MP4...');
-    state.progressStartTime = Date.now();
+    state.progressStartTime = performance.now();
     
     // Small delay to ensure loading overlay renders
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -1575,9 +2108,11 @@ function setupSettings() {
     // Check for updates button
     elements.checkUpdatesBtn.addEventListener('click', async () => {
         try {
+            console.log('[Updater] Manual check initiated by user');
             elements.checkUpdatesBtn.disabled = true;
             const res = await window.electronAPI.checkForUpdates();
             elements.checkUpdatesBtn.disabled = false;
+            console.log('[Updater] Manual check result:', res);
 
             if (res && res.updateAvailable === true) {
                 // actionable toast

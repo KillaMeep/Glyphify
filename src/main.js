@@ -46,15 +46,22 @@ app.whenReady().then(async () => {
     try {
         const updater = require('./update-checker');
         // Run once on startup (silent = true to avoid noisy logs). Let the updater auto-detect the running version.
+        console.log('[Main] Initializing updater and running first check');
         updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow, silent: true });
         // Periodic check every 24 hours
+        const intervalMs = 24 * 60 * 60 * 1000;
         setInterval(() => {
+            console.log('[Main] Running scheduled update check');
             updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
-        }, 24 * 60 * 60 * 1000);
+        }, intervalMs);
+        console.log(`[Main] Scheduled recurring update check every ${intervalMs}ms`);
 
         // Expose manual check via IPC
         ipcMain.handle('updater:check', async (event) => {
-            return await updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
+            console.log('[Main] Manual update check requested from renderer');
+            const result = await updater.checkForUpdates({ owner: 'KillaMeep', repo: 'Glyphify', window: mainWindow });
+            console.log('[Main] Manual update check result:', result && (result.updateAvailable === true ? `update ${result.latestTag}` : result.error || 'no update'));
+            return result;
         });
     } catch (e) {
         console.warn('[Main] Updater failed to initialize:', e);
@@ -118,12 +125,16 @@ ipcMain.handle('dialog:openFile', async (event, options) => {
         else if (ext === 'avi') mimeType = 'video/avi';
         else if (ext === 'mov') mimeType = 'video/quicktime';
         
+        const isGif = ext === 'gif';
+        const isVideo = mimeType.startsWith('video') || isGif;
+
         return {
             path: filePath,
             name: path.basename(filePath),
             data: `data:${mimeType};base64,${base64}`,
-            type: mimeType.startsWith('video') ? 'video' : 'image',
-            extension: ext
+            type: isVideo ? 'video' : 'image',
+            extension: ext,
+            isGif: isGif
         };
     }
     return null;
@@ -443,6 +454,234 @@ ipcMain.handle('app:getVersion', async () => {
     } catch (e) {
         console.warn('[Main] app.getVersion failed:', e && e.message);
         return null;
+    }
+});
+
+// Probe video/GIF metadata using system ffprobe (fallback for when worker probe times out)
+ipcMain.handle('probe:video', async (event, payload) => {
+    let tmpFile = null;
+    try {
+        // Normalize payload to Buffer
+        let buffer = null;
+        if (typeof payload === 'string') {
+            // data URL
+            const m = payload.match(/^data:(.*?);base64,(.*)$/);
+            if (!m) throw new Error('invalid_data_url');
+            buffer = Buffer.from(m[2], 'base64');
+        } else if (payload && payload.dataUrl) {
+            const m = payload.dataUrl.match(/^data:(.*?);base64,(.*)$/);
+            if (!m) throw new Error('invalid_data_url');
+            buffer = Buffer.from(m[2], 'base64');
+        } else if (payload && (payload.buffer || payload.byteLength)) {
+            // structured clone may give typed array
+            buffer = Buffer.from(payload.buffer ? payload.buffer : payload);
+        } else {
+            throw new Error('unsupported_payload');
+        }
+
+        const ext = (payload && payload.extension) ? `.${payload.extension}` : '';
+        tmpFile = path.join(os.tmpdir(), `glyphify-probe-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+        fs.writeFileSync(tmpFile, buffer);
+
+        const ffprobePath = require('ffprobe-static').path;
+        const util = require('util');
+        const execFile = util.promisify(require('child_process').execFile);
+        const args = ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_frames', tmpFile];
+
+        console.log('[Main] Running ffprobe on', tmpFile);
+        const { stdout } = await execFile(ffprobePath, args, { maxBuffer: 200 * 1024 * 1024 });
+        const parsed = JSON.parse(stdout);
+
+        let fps = null;
+        let frames = null;
+        const s = parsed.streams && parsed.streams[0];
+        if (s) {
+            const rate = s.avg_frame_rate || s.r_frame_rate;
+            if (rate && rate !== '0/0') {
+                const parts = rate.split('/');
+                if (parts.length === 2 && Number(parts[1]) !== 0) {
+                    fps = Number(parts[0]) / Number(parts[1]);
+                }
+            }
+            if (s.nb_frames) frames = parseInt(s.nb_frames, 10);
+        }
+        if ((!frames || frames === 0) && Array.isArray(parsed.frames)) {
+            frames = parsed.frames.length;
+        }
+
+        console.log('[Main] ffprobe result:', { fps, frames });
+        return { success: true, fps: fps ? Math.round(fps * 100) / 100 : null, frames: frames || null, raw: parsed };
+    } catch (err) {
+        console.error('[Main] probe:video failed:', err);
+        return { success: false, error: err && err.message ? err.message : String(err) };
+    } finally {
+        try { if (tmpFile) fs.unlinkSync(tmpFile); } catch (e) { /* ignore */ }
+    }
+});
+
+// Extract frames using native ffmpeg (fallback when worker stalls)
+ipcMain.handle('extract:frames', async (event, payload) => {
+    let tmpFile = null;
+    let tmpDir = null;
+    try {
+        // Normalize payload to Buffer
+        let buffer = null;
+        if (typeof payload === 'string') {
+            const m = payload.match(/^data:(.*?);base64,(.*)$/);
+            if (!m) throw new Error('invalid_data_url');
+            buffer = Buffer.from(m[2], 'base64');
+        } else if (payload && payload.dataUrl) {
+            const m = payload.dataUrl.match(/^data:(.*?);base64,(.*)$/);
+            if (!m) throw new Error('invalid_data_url');
+            buffer = Buffer.from(m[2], 'base64');
+        } else if (payload && (payload.buffer || payload.byteLength)) {
+            buffer = Buffer.from(payload.buffer ? payload.buffer : payload);
+        } else {
+            throw new Error('unsupported_payload');
+        }
+
+        const ext = (payload && payload.extension) ? `.${payload.extension}` : '';
+        tmpFile = path.join(os.tmpdir(), `glyphify-extract-${Date.now()}${ext}`);
+        fs.writeFileSync(tmpFile, buffer);
+
+        // Prepare temp directory for frames
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'glyphify-extract-'));
+
+        const ffmpegPath = require('ffmpeg-static');
+        const ffprobePath = require('ffprobe-static').path;
+        const util = require('util');
+        const execFile = util.promisify(require('child_process').execFile);
+        const spawn = require('child_process').spawn;
+
+        // Run ffprobe to estimate total frames/duration so we can report progress
+        let expectedFrames = null;
+        try {
+            const probeArgs = ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_format', tmpFile];
+            console.log('[Main] Probing for duration/frame info before extraction');
+            const { stdout: probeOut } = await execFile(ffprobePath, probeArgs, { maxBuffer: 200 * 1024 * 1024 });
+            const parsedProbe = JSON.parse(probeOut);
+            const s = parsedProbe.streams && parsedProbe.streams[0];
+            const format = parsedProbe.format || {};
+            const duration = parseFloat(format.duration) || (s && s.duration ? parseFloat(s.duration) : null);
+            let avgRate = null;
+            if (s) {
+                const rate = s.avg_frame_rate || s.r_frame_rate;
+                if (rate && rate !== '0/0') {
+                    const parts = rate.split('/');
+                    if (parts.length === 2 && Number(parts[1]) !== 0) {
+                        avgRate = Number(parts[0]) / Number(parts[1]);
+                    }
+                }
+                if (s.nb_frames) expectedFrames = parseInt(s.nb_frames, 10);
+            }
+            if (!expectedFrames && duration) {
+                const useFps = payload && payload.frameRate ? payload.frameRate : (avgRate || 25);
+                expectedFrames = Math.max(1, Math.round(duration * useFps));
+            }
+            console.log('[Main] Expected frames estimate:', expectedFrames);
+        } catch (probeErr) {
+            console.warn('[Main] Pre-extract probe failed:', probeErr && probeErr.message);
+        }
+
+        // Optional frameRate limiting
+        const args = ['-i', tmpFile, '-vsync', '0'];
+        if (payload && payload.frameRate) {
+            args.push('-vf', `fps=${payload.frameRate}`);
+        }
+        args.push(path.join(tmpDir, 'frame%05d.png'));
+
+        console.log('[Main] Running ffmpeg to extract frames ->', args.join(' '));
+
+        // Spawn ffmpeg and poll tmpDir for progress
+        await new Promise((resolveRun, rejectRun) => {
+            const ff = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'ignore'] });
+            let lastSent = 0;
+
+            const pollInterval = setInterval(() => {
+                try {
+                    const files = fs.readdirSync(tmpDir).filter(n => n.endsWith('.png'));
+                    const current = files.length;
+                    let percent = null;
+                    if (expectedFrames) {
+                        percent = Math.min(99, Math.round((current / expectedFrames) * 100));
+                    } else {
+                        // Heuristic: use current frames vs an arbitrary cap
+                        const cap = Math.max(100, current, 500);
+                        percent = Math.min(99, Math.round((current / cap) * 100));
+                    }
+                    if (percent !== lastSent) {
+                        lastSent = percent;
+                        try { event.sender.send('extract:frames:progress', { current, total: expectedFrames, percent }); } catch (e) { /* ignore */ }
+                    }
+                } catch (e) {
+                    // ignore read errors
+                }
+            }, 400);
+
+            ff.on('error', (err) => {
+                clearInterval(pollInterval);
+                rejectRun(err);
+            });
+
+            ff.on('exit', (code, sig) => {
+                clearInterval(pollInterval);
+                try { event.sender.send('extract:frames:progress', { current: expectedFrames || 0, total: expectedFrames || 0, percent: 100 }); } catch (e) {}
+                if (code === 0) resolveRun(); else rejectRun(new Error('ffmpeg_failed'));
+            });
+        });
+
+        // Use ffprobe to read frame timestamps
+        const probeArgs = ['-v', 'quiet', '-print_format', 'json', '-show_frames', tmpFile];
+        const { stdout } = await execFile(ffprobePath, probeArgs, { maxBuffer: 200 * 1024 * 1024 });
+        const parsed = JSON.parse(stdout);
+        const timestamps = Array.isArray(parsed.frames) ? parsed.frames.map(f => {
+            return (f.best_effort_timestamp_time || f.pkt_pts_time || f.pts_time || f.time) ? Number(f.best_effort_timestamp_time || f.pkt_pts_time || f.pts_time || f.time) : null;
+        }) : [];
+
+        // Read extracted frames
+        const files = fs.readdirSync(tmpDir).filter(n => n.endsWith('.png')).sort();
+
+        // Safety cap
+        const maxFrames = 1000;
+        if (files.length === 0) throw new Error('no_frames_extracted');
+        if (files.length > maxFrames) throw new Error('too_many_frames');
+
+        const PNG = require('pngjs').PNG;
+        const frames = [];
+        for (let i = 0; i < files.length; i++) {
+            const p = path.join(tmpDir, files[i]);
+            const buf = fs.readFileSync(p);
+            const png = PNG.sync.read(buf);
+            const width = png.width;
+            const height = png.height;
+            const pixels = Buffer.from(png.data); // RGBA
+
+            // Derive delay using timestamps when available
+            let delay = null;
+            if (timestamps && timestamps.length > i) {
+                const t0 = timestamps[i];
+                const t1 = timestamps[i + 1] || null;
+                if (t0 != null && t1 != null) {
+                    delay = Math.round((t1 - t0) * 1000);
+                }
+            }
+            // Fallback delay
+            if (!delay) delay = Math.round(1000 / (payload && payload.frameRate ? payload.frameRate : 25));
+
+            frames.push({ width, height, pixels, delay });
+        }
+
+        // Cleanup
+        try { fs.unlinkSync(tmpFile); } catch (e) { /* ignore */ }
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+
+        const fps = null; // best-effort FPS can be computed from timestamps
+        return { success: true, fps, framesCount: frames.length, frames };
+    } catch (err) {
+        console.error('[Main] extract:frames failed:', err);
+        try { if (tmpFile) fs.unlinkSync(tmpFile); } catch (e) {}
+        try { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+        return { success: false, error: err && err.message ? err.message : String(err) };
     }
 });
 

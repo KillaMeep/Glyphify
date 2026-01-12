@@ -8,7 +8,6 @@ A modern Electron desktop application for converting images and videos to ASCII 
 
 ## Features
 
-
 - **Image Conversion**: Convert PNG, JPG, GIF, WebP, and BMP images to ASCII art
 - **Video Conversion**: Convert MP4 and WebM videos to animated ASCII
 - **Multiple Output Modes**: Color and grayscale ASCII output
@@ -45,6 +44,10 @@ cd Glyphify
 
 # Install dependencies
 npm install
+
+# (If you pulled the latest changes) Install platform ffprobe binary dependency
+# required for the Node-side ffprobe fallback used for probing GIFs/videos
+npm install ffprobe-static --save
 
 # Run the application
 npm start

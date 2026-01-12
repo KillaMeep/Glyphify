@@ -33,19 +33,30 @@ function fetchLatestRelease(owner, repo) {
   };
 
   return new Promise((resolve, reject) => {
+    console.log(`[Updater] Fetching latest release for ${owner}/${repo}`);
     const req = https.get(options, (res) => {
       let raw = '';
+      console.log(`[Updater] GitHub API responded with status ${res.statusCode}`);
       res.on('data', (chunk) => raw += chunk);
       res.on('end', () => {
         try {
+          if (res.statusCode && res.statusCode >= 400) {
+            console.warn('[Updater] GitHub API returned error:', res.statusCode, raw.toString().slice(0, 200));
+            return reject(new Error(`GitHub API error ${res.statusCode}`));
+          }
           const json = JSON.parse(raw);
+          console.log('[Updater] Fetched latest release:', json.tag_name || json.name || '(no tag)');
           resolve(json);
         } catch (err) {
+          console.warn('[Updater] Failed to parse GitHub response:', err && err.message);
           reject(err);
         }
       });
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      console.warn('[Updater] Network error while fetching latest release:', err && err.message);
+      reject(err);
+    });
     req.end();
   });
 }
@@ -116,9 +127,12 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
   try {
     if (!owner || !repo) throw new Error('owner and repo required');
 
+    logger.log(`[Updater] Starting update check for ${owner}/${repo}`);
+
     // Auto-detect current version when not provided
     let detected = currentVersion;
     if (!detected) detected = detectCurrentVersion(logger);
+    logger.log('[Updater] Detected current version:', detected);
 
     const latest = await fetchLatestRelease(owner, repo);
     const latestTag = latest.tag_name || latest.name || '';
@@ -131,6 +145,7 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
       // Inform renderer (no comparison possible)
       if (window && window.webContents) {
         try {
+          logger.log('[Updater] Sending update:available (current version unknown) to renderer');
           window.webContents.send('update:available', {
             currentVersion: null,
             latestTag,
@@ -172,6 +187,7 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
       // Send IPC to renderer if available
       if (window && window.webContents) {
         try {
+          logger.log('[Updater] Notifying renderer of available update:', latestTag);
           window.webContents.send('update:available', {
             currentVersion: detected,
             latestTag,

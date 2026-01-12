@@ -67,17 +67,34 @@ async function extractFrames(videoData, frameRate) {
         if (workerAborted) throw new Error('Aborted by user');
         self.postMessage({ type: 'status', message: 'Decoding frames with FFmpeg...' });
         
+        // If frameRate is not specified, try probing the file to detect a natural fps (useful for GIFs)
+        let effectiveFPS = frameRate;
+        if (!effectiveFPS) {
+            self.postMessage({ type: 'status', message: 'Probing file for native frame rate...' });
+            try {
+                const probeRes = await probeVideo(videoData);
+                if (probeRes && probeRes.fps) {
+                    effectiveFPS = probeRes.fps;
+                }
+            } catch (e) {
+                console.warn('[FrameExtractor Worker] Probe failed:', e);
+            }
+            // Fallback to a sensible default if still unknown
+            if (!effectiveFPS) effectiveFPS = 25;
+            console.log('[FrameExtractor Worker] Using effective FPS:', effectiveFPS);
+        }
+
         self.postMessage({ type: 'status', message: 'Extracting frames...' });
         
-        // Extract frames as raw RGBA data
+        // Build ffmpeg args. If effectiveFPS is provided, request a specific extraction rate, otherwise get native frames.
+        const args = ['-i', 'input.mp4'];
+        if (frameRate) {
+            args.push('-vf', `fps=${frameRate}`);
+        }
+        args.push('-f', 'image2', '-c:v', 'png', 'frame%05d.png');
+
         const t2 = performance.now();
-        await ffmpeg.exec([
-            '-i', 'input.mp4',
-            '-vf', `fps=${frameRate}`,
-            '-f', 'image2',
-            '-c:v', 'png',
-            'frame%05d.png'
-        ]);
+        await ffmpeg.exec(args);
         if (workerAborted) throw new Error('Aborted by user');
         console.log(`[FrameExtractor Worker] FFmpeg extraction complete in ${(performance.now() - t2).toFixed(0)}ms`);        
         self.postMessage({ type: 'status', message: 'Reading frames...' });
@@ -117,12 +134,16 @@ async function extractFrames(videoData, frameRate) {
                 console.log(`[FrameExtractor Worker] Frame ${i}: read=${readTime.toFixed(0)}ms, decode=${decodeTime.toFixed(0)}ms, canvas=${canvasTime.toFixed(0)}ms, total=${(performance.now() - frameStart).toFixed(0)}ms`);
             }
             
+            // Time and delay calculations: try to preserve natural timing using effectiveFPS, else fallback
+            const frameDelay = Math.floor(1000 / (frameRate || effectiveFPS || 25));
+            const frameTime = i / (frameRate || effectiveFPS || 25);
+
             frames.push({
                 imageData: imageData,
                 width: bitmap.width,
                 height: bitmap.height,
-                time: i / frameRate,
-                delay: Math.floor(1000 / frameRate)
+                time: frameTime,
+                delay: frameDelay
             });
             
             // Clean up
@@ -177,21 +198,28 @@ async function probeVideo(videoData) {
     try {
         await loadFFmpeg();
         
-        console.log('[FrameExtractor Worker] Probing video metadata...');
+        console.log('[FrameExtractor Worker] Probe request received');
+        self.postMessage({ type: 'status', message: 'probe-started' });
 
         // Reset log buffer
         logBuffer = '';
         
         // Write video file
         await ffmpeg.writeFile('input.mp4', new Uint8Array(videoData));
+        self.postMessage({ type: 'status', message: 'file-written' });
         
         // Use ffmpeg to emit stream info; parse fps/tbr from logs
-        await ffmpeg.exec([
-            '-i', 'input.mp4',
-            '-vf', 'showinfo',
-            '-f', 'null',
-            '-'
-        ]);
+        try {
+            await ffmpeg.exec([
+                '-i', 'input.mp4',
+                '-vf', 'showinfo',
+                '-f', 'null',
+                '-'
+            ]);
+        } catch (execErr) {
+            console.warn('[FrameExtractor Worker] ffmpeg exec returned non-zero (expected for probe):', execErr && execErr.message);
+            // continue — showinfo may exit non-zero, but will still populate logBuffer
+        }
 
         const logText = logBuffer;
         
@@ -206,21 +234,32 @@ async function probeVideo(videoData) {
             fps = parseFloat(tbMatch[1]);
         }
         
-        console.log(`[FrameExtractor Worker] Detected FPS: ${fps}`);
+        // Attempt to parse frame count from showinfo logs (n:NNN entries)
+        const ns = Array.from(logText.matchAll(/n:\s*(\d+)/g)).map(m => parseInt(m[1], 10));
+        let frameCount = null;
+        if (ns.length > 0) {
+            const lastN = ns[ns.length - 1];
+            frameCount = lastN + 1; // n is zero-indexed
+        }
+
+        console.log(`[FrameExtractor Worker] Probe results -> fps: ${fps}, frames: ${frameCount}`);
+        self.postMessage({ type: 'status', message: `probe-results: fps=${fps}, frames=${frameCount}` });
         
         // Clean up
         await ffmpeg.deleteFile('input.mp4');
         
         self.postMessage({
             type: 'probe-complete',
-            fps: fps
+            fps: fps,
+            frames: frameCount
         });
-        
+        return { fps, frames: frameCount };
     } catch (error) {
         console.error('[FrameExtractor Worker] Probe error:', error);
         self.postMessage({
             type: 'probe-error',
             message: error.message
         });
+        return null;
     }
 }
