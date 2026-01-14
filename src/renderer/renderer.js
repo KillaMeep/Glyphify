@@ -1869,6 +1869,7 @@ async function saveAsPNG() {
     if (!filePath) return;
     
     const canvas = state.converter.renderToCanvas(state.asciiResult, state.settings.pngScale);
+    console.log('[Export] saveAsPNG canvas size:', canvas.width, 'x', canvas.height, 'ascii width:', state.asciiResult.width, 'lines:', state.asciiResult.lines.length);
     const data = canvas.toDataURL('image/png');
     const result = await window.electronAPI.writeFile(filePath, data, 'base64');
     

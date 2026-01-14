@@ -471,16 +471,37 @@ class ASCIIConverter {
         const lineHeight = fontSize * this.options.lineHeight;
         let charWidth = fontSize * 0.6; // Monospace character width ratio
         
-        // Use the maximum line length (post-trim) to compute canvas width so we don't include trailing blank columns
+        // Measure actual pixel width of each trimmed line to compute canvas width accurately
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.font = `${fontSize}px Consolas, 'Courier New', monospace`;
+        tempCtx.textBaseline = 'top';
+
+        let maxMeasuredWidth = 0;
+        for (const l of lines) {
+            const measureLine = l.replace(/\u2800/g, ' ');
+            const w = measureLine.length ? tempCtx.measureText(measureLine).width : 0;
+            if (w > maxMeasuredWidth) maxMeasuredWidth = w;
+        }
+
+        // Fallback: if measurement failed (maxMeasuredWidth == 0), fall back to character count * charWidth
         const maxLineLen = lines.reduce((m, l) => Math.max(m, l.length), 0);
-        const canvasWidth = Math.max(1, maxLineLen) * charWidth;
-        const canvasHeight = Math.max(1, lines.length) * lineHeight;
-        
+        const canvasWidth = Math.ceil(maxMeasuredWidth > 0 ? maxMeasuredWidth : Math.max(1, maxLineLen) * charWidth);
+        const canvasHeight = Math.ceil(Math.max(1, lines.length) * lineHeight);
+
         const canvas = document.createElement('canvas');
-        canvas.width = Math.ceil(canvasWidth);
-        canvas.height = Math.ceil(canvasHeight);
-        
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // Diagnostic logging to help debug right-side padding issues
+        if (typeof console !== 'undefined' && console.log) {
+            console.log('[ASCIIConverter] renderToCanvas: maxLineLen=', maxLineLen, 'charWidth=', charWidth, 'maxMeasuredWidth=', Math.round(maxMeasuredWidth), 'canvasWidth=', canvas.width, 'canvasHeight=', canvas.height);
+        }
+
         const ctx = canvas.getContext('2d', { alpha: true });
+        // Re-apply font after canvas size changes
+        ctx.font = `${fontSize}px Consolas, 'Courier New', monospace`;
+        ctx.textBaseline = 'top';
         
         // Parse background color for alpha support
         const bgColor = this.options.backgroundColor;
