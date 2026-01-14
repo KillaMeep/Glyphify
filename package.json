@@ -1,6 +1,6 @@
 {
   "name": "glyphify",
-  "version": "1.0.0",
+  "version": "dev",
   "description": "A modern Electron desktop application for converting images and videos to ASCII art",
   "main": "src/main.js",
   "scripts": {

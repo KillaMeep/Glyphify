@@ -208,6 +208,7 @@ ipcMain.handle('dialog:openFile', async (event, options) => {
             name: path.basename(filePath),
             data: `data:${mimeType};base64,${base64}`,
             type: isVideo ? 'video' : 'image',
+            mime: mimeType,
             extension: ext,
             isGif: isGif
         };

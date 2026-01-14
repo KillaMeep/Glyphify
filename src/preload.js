@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Updater
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
     onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (event, payload) => callback(payload)),
+    onUpdateSkipped: (callback) => ipcRenderer.on('update:skipped', (event, payload) => callback(payload)),
     // App info
     getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
 

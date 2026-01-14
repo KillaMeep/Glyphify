@@ -134,9 +134,29 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
     if (!detected) detected = detectCurrentVersion(logger);
     logger.log('[Updater] Detected current version:', detected);
 
+    // If running a dev build, skip contacting GitHub for updates
+    try {
+      const norm = normalizeVersion(detected).toLowerCase();
+      if (norm === 'dev') {
+        logger.log('[Updater] Dev build detected; skipping update check');
+        // Notify renderer when appropriate (non-silent checks)
+        try {
+          if (window && window.webContents && !silent) {
+            logger.log('[Updater] Sending update:skipped IPC to renderer (dev build)');
+            window.webContents.send('update:skipped', { currentVersion: detected, note: 'dev_build' });
+          }
+        } catch (e) {
+          logger.warn('[Updater] Failed to send update:skipped IPC:', e && e.message);
+        }
+        return { updateAvailable: false, latestTag: null, latestUrl: null, release: null, currentVersion: detected };
+      }
+    } catch (e) {
+      logger.warn('[Updater] Error checking for dev version shortcut:', e && e.message);
+    }
+
     const latest = await fetchLatestRelease(owner, repo);
     const latestTag = latest.tag_name || latest.name || '';
-    const latestUrl = latest.html_url || `https://github.com/${owner}/${repo}/releases`;
+    const latestUrl = latest.html_url || `https://github.com/${owner}/${repo}/releases`; 
 
     logger.log(`[Updater] Current: ${detected}, Latest: ${latestTag}`);
 

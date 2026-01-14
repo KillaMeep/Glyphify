@@ -311,14 +311,40 @@ class ASCIIConverter {
             colorData.push(lineColors);
         }
         
-        // Normalize braille blank (U+2800) to ASCII space for plain text output
-        const textLines = lines.map(l => l.replace(/\u2800/g, ' '));
+        // Trim trailing blank characters on each line to avoid right-side padding in exports
+        const trimmedLines = [];
+        const trimmedColorData = [];
+        let maxWidth = 0;
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const colors = colorData[i];
+            // Find last non-blank character (treat space and braille blank as blank)
+            let lastNonBlank = -1;
+            for (let j = line.length - 1; j >= 0; j--) {
+                const ch = line[j];
+                if (ch !== ' ' && ch !== '\u2800') { lastNonBlank = j; break; }
+            }
+            if (lastNonBlank === -1) {
+                trimmedLines.push('');
+                trimmedColorData.push([]);
+            } else {
+                const tline = line.slice(0, lastNonBlank + 1);
+                trimmedLines.push(tline);
+                trimmedColorData.push(colors.slice(0, lastNonBlank + 1));
+                if (tline.length > maxWidth) maxWidth = tline.length;
+            }
+        }
+
+        // Ensure width reflects the maximum trimmed line length (may be 0 if all lines blank)
+        const finalWidth = maxWidth;
+
+        const textLines = trimmedLines.map(l => l.replace(/\u2800/g, ' '));
 
         return {
             text: textLines.join('\n'),
-            lines,
-            colorData,
-            width,
+            lines: trimmedLines,
+            colorData: trimmedColorData,
+            width: finalWidth,
             height
         };
     }
@@ -445,12 +471,14 @@ class ASCIIConverter {
         const lineHeight = fontSize * this.options.lineHeight;
         let charWidth = fontSize * 0.6; // Monospace character width ratio
         
-        const canvasWidth = lines[0].length * charWidth;
-        const canvasHeight = lines.length * lineHeight;
+        // Use the maximum line length (post-trim) to compute canvas width so we don't include trailing blank columns
+        const maxLineLen = lines.reduce((m, l) => Math.max(m, l.length), 0);
+        const canvasWidth = Math.max(1, maxLineLen) * charWidth;
+        const canvasHeight = Math.max(1, lines.length) * lineHeight;
         
         const canvas = document.createElement('canvas');
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
+        canvas.width = Math.ceil(canvasWidth);
+        canvas.height = Math.ceil(canvasHeight);
         
         const ctx = canvas.getContext('2d', { alpha: true });
         

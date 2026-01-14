@@ -179,6 +179,15 @@ async function init() {
         console.warn('[Renderer] Updater integration failed:', e);
     }
 
+    try {
+        window.electronAPI.onUpdateSkipped((payload) => {
+            console.log('[Renderer] Received update:skipped payload', payload);
+            showToast('Update checks skipped for development build', 'info');
+        });
+    } catch (e) {
+        console.warn('[Renderer] Updater skipped integration failed:', e);
+    }
+
     // Update About version text to detected app version
     (async () => {
         try {
@@ -415,15 +424,25 @@ async function displayPreview(dataUrl, isVideo, isGif = false) {
         elements.videoPreview.src = dataUrl;
         elements.videoPreview.loop = true; // Enable looping immediately
         elements.gifOptions.classList.remove('hidden');
-        
-        // Start playing the video immediately
-        elements.videoPreview.play().catch(err => {
-            console.warn('[Preview] Initial autoplay blocked:', err);
-        });
+        // Defer initial autoplay until after capability detection and metadata handlers
 
         // Quick capability check: if the HTML video element cannot play this MIME, fall back
         try {
-            const mime = state.currentFile && state.currentFile.type ? state.currentFile.type : null;
+            // Determine a reliable MIME type:
+            let mime = null;
+            if (state.currentFile) {
+                if (state.currentFile.mime && typeof state.currentFile.mime === 'string') {
+                    mime = state.currentFile.mime;
+                } else if (state.currentFile.type && state.currentFile.type.includes('/')) {
+                    mime = state.currentFile.type;
+                }
+            }
+            // Fallback: parse MIME from data URL if necessary
+            if (!mime && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+                const match = dataUrl.match(/^data:([^;]+);/);
+                if (match) mime = match[1];
+            }
+
             if (mime && typeof elements.videoPreview.canPlayType === 'function') {
                 const can = elements.videoPreview.canPlayType(mime);
                 if (!can || can === '') {
@@ -2197,6 +2216,13 @@ function setupSettings() {
             elements.checkUpdatesBtn.disabled = false;
             console.log('[Updater] Manual check result:', res);
             console.log('[Updater] Current running version:', res && res.currentVersion ? res.currentVersion : '(unknown)');
+
+            // If updater returned a dev-skip (latestTag null and currentVersion is 'dev'), show tailored message
+            if (res && res.latestTag === null && res.currentVersion && typeof res.currentVersion === 'string' && res.currentVersion.trim().toLowerCase() === 'dev') {
+                showToast('Update checks skipped for development build', 'info');
+                elements.checkUpdatesBtn.disabled = false;
+                return;
+            }
 
             if (res && res.updateAvailable === true) {
                 // actionable toast
