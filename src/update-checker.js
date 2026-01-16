@@ -137,7 +137,8 @@ async function checkForUpdates({ owner, repo, currentVersion, window = null, log
     // If running a dev build, skip contacting GitHub for updates
     try {
       const norm = normalizeVersion(detected).toLowerCase();
-      if (norm === 'dev') {
+      // Treat versions containing 'dev' (e.g. 'dev', '0.0.0-dev', '1.2.3-dev.1') as development builds
+      if (norm === 'dev' || norm.indexOf('dev') !== -1) {
         logger.log('[Updater] Dev build detected; skipping update check');
         // Notify renderer when appropriate (non-silent checks)
         try {
