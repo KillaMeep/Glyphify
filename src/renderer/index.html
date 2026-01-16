@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:;">
     <title>Glyphify</title>
+    <!-- WebMWriter provided via preload.js (exposes installed package to renderer) -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -83,7 +84,7 @@
                                 <p>Drop an image or video here</p>
                                 <span>or</span>
                                 <button class="btn btn-primary" id="browseBtn">Browse Files</button>
-                                <p class="supported-formats">PNG, JPG, GIF, WebP, BMP, MP4, WebM</p>
+                                <p class="supported-formats">PNG, JPG, GIF, WebP, BMP, MP4</p>
                             </div>
                             <div class="preview-container hidden" id="previewContainer">
                                 <img id="imagePreview" class="media-preview hidden" alt="Preview">
@@ -252,7 +253,7 @@
                                     <option value="png">Image (.png)</option>
                                     <option value="gif">Animated GIF</option>
                                     <option value="mp4">Video (.mp4)</option>
-                                    <option value="webm">Video (.webm)</option>
+                                    <option value="webm" disabled>Video (.webm — unsupported)</option>
                                 </select>
                             </div>
                         </div>

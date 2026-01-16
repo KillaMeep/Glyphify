@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { Muxer, ArrayBufferTarget } = require('mp4-muxer');
 const { GIFEncoder } = require('gif.js');
 
@@ -314,6 +315,15 @@ ipcMain.handle('video:addChunk', async (event, { muxerId, chunkData, timestamp, 
         if (Array.isArray(dc.description)) {
             dc.description = new Uint8Array(dc.description);
         }
+        // Ensure colorSpace exists and has sensible defaults
+        dc.colorSpace = dc.colorSpace || {
+            primaries: 'bt709',
+            transfer: 'bt709',
+            matrix: 'bt709',
+            fullRange: false
+        };
+        // Ensure codec fallback
+        dc.codec = dc.codec || 'avc1';
         metaForMuxer = { decoderConfig: dc };
     }
 
@@ -366,15 +376,204 @@ ipcMain.handle('video:finalize', async (event, { muxerId }) => {
     const muxer = global.muxers?.get(muxerId);
     if (!muxer) throw new Error('Muxer not found');
     
-    muxer.finalize();
-    const buffer = muxer.target.buffer;
-    
-    // Cleanup
-    global.muxers.delete(muxerId);
-    console.log(`[Main] Finalized muxer ${muxerId}, size: ${buffer.byteLength} bytes`);
-    
-    // Return as base64 for IPC transfer
-    return { data: Buffer.from(buffer).toString('base64') };
+    try {
+        muxer.finalize();
+        const buffer = muxer.target.buffer;
+        // Cleanup
+        global.muxers.delete(muxerId);
+        console.log(`[Main] Finalized muxer ${muxerId}, size: ${buffer.byteLength} bytes`);
+        // Return as base64 for IPC transfer
+        return { data: Buffer.from(buffer).toString('base64') };
+    } catch (err) {
+        // Ensure cleanup and provide a helpful error
+        try { global.muxers.delete(muxerId); } catch (e) {}
+        console.error('[Main] Muxer finalize failed:', err && err.message);
+        throw new Error(`Muxer finalize failed: ${err && err.message}`);
+    }
+});
+
+
+
+// WebM node encoder removed — WebM export is unsupported and this handler has been removed to avoid accidental use.
+
+// Encode a sequence of PNG frames into MP4/WebM on the Node side using system ffmpeg
+ipcMain.handle('video:encodeFrames', async (event, { frames, width, height, fps, format = 'mp4', quality = 23 }) => {
+    if (!frames || !Array.isArray(frames) || frames.length === 0) throw new Error('No frames provided');
+
+    // Ensure ffmpeg is available by spawning -- will throw if not found
+    try {
+        const check = spawn('ffmpeg', ['-version']);
+        // allow it to exit; we don't need to wait for full output
+        await new Promise((resolve, reject) => {
+            let done = false;
+            check.on('error', (err) => { if (!done) { done = true; reject(err); } });
+            check.on('close', (code) => { if (!done) { done = true; code === 0 ? resolve() : resolve(); } });
+        });
+    } catch (err) {
+        throw new Error('ffmpeg is not available on PATH');
+    }
+
+    const tmpdir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'glyphify-'));
+    try {
+        // Write frames as PNG files
+        for (let i = 0; i < frames.length; i++) {
+            const raw = frames[i];
+            let base64 = raw;
+            const prefix = 'data:image/png;base64,';
+            if (typeof base64 === 'string' && base64.startsWith(prefix)) base64 = base64.slice(prefix.length);
+            const buf = Buffer.from(base64, 'base64');
+            const fname = path.join(tmpdir, `frame-${String(i).padStart(6, '0')}.png`);
+            fs.writeFileSync(fname, buf);
+        }
+
+        const outPath = path.join(tmpdir, `out.${format === 'mp4' ? 'mp4' : 'webm'}`);
+        const inputPattern = path.join(tmpdir, 'frame-%06d.png');
+
+        const args = ['-y', '-framerate', String(fps), '-i', inputPattern, '-vf', 'pad=iw+mod(iw,2):ih+mod(ih,2)'];
+        if (format === 'mp4') {
+            args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(Math.max(18, Math.min(28, quality ? quality : 23))), outPath);
+        } else {
+            // WebM via VP9
+            args.push('-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', String(Math.max(20, Math.min(40, quality ? 40 - Math.round(quality / 3) : 30))), outPath);
+        }
+
+        await new Promise((resolve, reject) => {
+            const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+            let stderr = '';
+            ff.stderr.on('data', chunk => { stderr += chunk.toString(); });
+            ff.on('close', code => { if (code === 0) resolve(); else reject(new Error('ffmpeg failed: ' + stderr)); });
+            ff.on('error', err => reject(err));
+        });
+
+        const data = fs.readFileSync(outPath);
+        return { data: data.toString('base64'), fileName: path.basename(outPath) };
+    } catch (err) {
+        console.error('[Main] video:encodeFrames failed:', err && (err.message || err));
+        throw err;
+    } finally {
+        try { fs.rmSync(tmpdir, { recursive: true, force: true }); } catch (e) {}
+    }
+});
+
+// Stream frames to ffmpeg via stdin and capture output (avoids writing many PNGs to disk)
+ipcMain.handle('video:encodeFramesStream', async (event, { frames, width, height, fps, format = 'mp4', quality = 23 }) => {
+    if (!frames || !Array.isArray(frames) || frames.length === 0) throw new Error('No frames provided');
+
+    // Ensure ffmpeg is available
+    try {
+        const check = spawn('ffmpeg', ['-version']);
+        await new Promise((resolve, reject) => {
+            let done = false;
+            check.on('error', (err) => { if (!done) { done = true; reject(err); } });
+            check.on('close', (code) => { if (!done) { done = true; resolve(); } });
+        });
+    } catch (err) {
+        throw new Error('ffmpeg is not available on PATH');
+    }
+
+    // Build ffmpeg args for image2pipe input and streaming output to stdout
+    const vfFilter = 'pad=iw+mod(iw,2):ih+mod(ih,2),format=yuv420p';
+    const args = ['-y', '-f', 'image2pipe', '-framerate', String(fps || 24), '-i', 'pipe:0', '-vf', vfFilter];
+
+    // Debug: print args to help diagnose filter/encoding issues
+    console.debug('[Main] ffmpeg args:', args.join(' '));
+
+    if (format === 'mp4') {
+        // Use libx264 and set movflags to enable streaming to stdout
+        const crf = String(Math.max(18, Math.min(28, quality ? quality : 23)));
+        args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', crf, '-pix_fmt', 'yuv420p', '-movflags', 'frag_keyframe+empty_moov+faststart', '-f', 'mp4', 'pipe:1');
+    } else {
+        // webm vp9
+        const crf = String(Math.max(20, Math.min(40, quality ? 40 - Math.round(quality / 3) : 30)));
+        args.push('-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', crf, '-f', 'webm', 'pipe:1');
+    }
+
+    return await new Promise(async (resolve, reject) => {
+        const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        let stderr = '';
+        const chunks = [];
+        let settled = false;
+
+        ff.stderr.on('data', chunk => { stderr += chunk.toString(); });
+        ff.stdout.on('data', chunk => { chunks.push(Buffer.from(chunk)); });
+
+        ff.on('close', (code) => {
+            if (settled) return;
+            settled = true;
+            if (code === 0) {
+                const out = Buffer.concat(chunks);
+                resolve({ data: out.toString('base64'), size: out.length });
+            } else {
+                reject(new Error('ffmpeg failed: ' + stderr));
+            }
+        });
+
+        ff.on('error', (err) => {
+            if (settled) return;
+            settled = true;
+            reject(err);
+        });
+
+        try {
+            // Write frames to stdin as PNG blobs concatenated with backpressure and exit handling
+            let ffExited = false;
+            ff.on('close', () => { ffExited = true; });
+            ff.on('error', () => { ffExited = true; });
+
+            // Listen for stdin errors to catch EPIPE (broken pipe) and reject early with ffmpeg stderr
+            let settled = false;
+            const cleanupAndReject = (err) => {
+                if (settled) return;
+                settled = true;
+                try { ff.kill('SIGKILL'); } catch (e) {}
+                reject(new Error((err && err.message) || err || 'ffmpeg stdin error' ) + (stderr ? ' | ffmpeg stderr: ' + stderr : ''));
+            };
+
+            ff.stdin.on('error', (err) => {
+                console.error('[Main] ffmpeg stdin error:', err && err.message);
+                ffExited = true;
+                cleanupAndReject(err);
+            });
+
+            for (let i = 0; i < frames.length; i++) {
+                if (ffExited) throw new Error('ffmpeg process exited before all frames were written');
+
+                let base64 = frames[i];
+                const prefix = 'data:image/png;base64,';
+                if (typeof base64 === 'string' && base64.startsWith(prefix)) base64 = base64.slice(prefix.length);
+                const buf = Buffer.from(base64, 'base64');
+
+                // Respect backpressure: if write returns false, wait for 'drain' before continuing
+                try {
+                    const ok = ff.stdin.write(buf);
+                    if (!ok) {
+                        await new Promise((resolve, reject) => {
+                            const onDrain = () => {
+                                ff.stdin.removeListener('error', onError);
+                                resolve();
+                            };
+                            const onError = (err) => {
+                                ff.stdin.removeListener('drain', onDrain);
+                                reject(err);
+                            };
+                            ff.stdin.once('drain', onDrain);
+                            ff.stdin.once('error', onError);
+                        });
+                    }
+                } catch (err) {
+                    // Synchronous write error (rare) — include ffmpeg stderr and abort
+                    cleanupAndReject(err);
+                    return;
+                }
+            }
+
+            // End stdin if ffmpeg still running
+            if (!ffExited && typeof ff.stdin.end === 'function') ff.stdin.end();
+        } catch (err) {
+            try { ff.kill('SIGKILL'); } catch (e) {}
+            reject(err);
+        }
+    });
 });
 
 // GIF encoder using gif.js

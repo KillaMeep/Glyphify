@@ -1863,30 +1863,23 @@ class ASCIIAnimationEncoder {
 
 
     /**
-     * Encode frames as WebM video using Web Worker + FFmpeg.wasm
+     * Encode frames as WebM video using client-side muxer (webm-writer) first
      */
     async encodeWebM(progressCallback = null, abortSignal = null) {
-        // Use MediaRecorder for faster WebM encoding (no FFmpeg)
-        return this.encodeVideo('webm', progressCallback, abortSignal);
+        throw new Error('WebM export has been removed. Export as MP4 or GIF instead.');
     }
 
     /**
      * Encode frames as MP4 video using Web Worker + FFmpeg.wasm
      */
     async encodeMP4(progressCallback = null, abortSignal = null) {
-        // Prefer WebCodecs + muxer when available (Electron path)
-        if (typeof VideoEncoder !== 'undefined' && typeof window.electronAPI?.createVideoMuxer === 'function') {
-            try {
-                console.log('[Encoder] MP4 encoding via WebCodecs + muxer (preferred)');
-                return await this.encodeVideoWebCodecs(progressCallback, abortSignal);
-            } catch (err) {
-                console.warn('[Encoder] WebCodecs MP4 encoding failed, falling back to MediaRecorder:', err);
-            }
+        // Strictly use WebCodecs + mp4-muxer for MP4 encoding; fail if unavailable
+        if (typeof VideoEncoder === 'undefined' || typeof window.electronAPI?.createVideoMuxer !== 'function') {
+            throw new Error('MP4 export is not supported on this platform (WebCodecs or muxer missing)');
         }
 
-        // FFmpeg has been unreliable - fallback to MediaRecorder
-        console.warn('[Encoder] MP4 encoding via FFmpeg disabled due to reliability issues. Using MediaRecorder instead.');
-        return this.encodeVideo('mp4', progressCallback, abortSignal);
+        console.log('[Encoder] MP4 encoding via WebCodecs + mp4-muxer (canonical)');
+        return await this.encodeVideoWebCodecs(progressCallback, abortSignal);
     }
 
     /**
@@ -1982,17 +1975,23 @@ class ASCIIAnimationEncoder {
             throw new Error('No frames to encode');
         }
         
-        // Try WebCodecs first (much faster, proper FPS control)
-        if (typeof VideoEncoder !== 'undefined' && format === 'webm') {
+        // Try WebCodecs first (much faster, proper FPS control) — only for MP4 via native muxer
+        if (typeof VideoEncoder !== 'undefined' && format === 'mp4' && typeof window.electronAPI?.createVideoMuxer === 'function') {
             try {
                 return await this.encodeVideoWebCodecs(progressCallback, abortSignal);
             } catch (err) {
-                console.warn('[Encoder] WebCodecs failed, falling back to MediaRecorder:', err);
+                console.warn('[Encoder] WebCodecs failed for MP4, falling back to MediaRecorder:', err);
             }
         }
         
-        // Fallback to MediaRecorder
-        return await this.encodeVideoMediaRecorder(format, progressCallback, abortSignal);
+        // Fallback to Node-side encoder (ffmpeg) running in main process
+        try {
+            console.log('[Encoder] Falling back to node-side ffmpeg encoder');
+            return await this.encodeVideoNode(format, progressCallback, abortSignal);
+        } catch (e) {
+            console.warn('[Encoder] Node-side encoding failed, aborting:', e);
+            throw e;
+        }
     }
 
     /**
@@ -2012,188 +2011,291 @@ class ASCIIAnimationEncoder {
         fps = fps || 24;
         
         console.log(`[WebCodecs] Encoding ${this.frames.length} frames at ${width}x${height}, ${fps.toFixed(2)} fps`);
-        
-        // Create muxer in main process (include frameRate for accurate MP4 metadata)
-        const { muxerId } = await window.electronAPI.createVideoMuxer(width, height, Math.round(fps));
-        console.log(`[WebCodecs] Created muxer: ${muxerId} (frameRate=${Math.round(fps)})`);
-        
-        return new Promise((resolve, reject) => {
-            // Use appropriate H.264 level based on resolution
-            // Level 3.1 supports up to 1280x720, Level 4.0 supports up to 2048x1024, Level 5.1 supports up to 4096x2304
-            let codecString = 'avc1.42001f'; // Level 3.1 (default)
-            if (width * height > 921600) { // > 1280x720
-                codecString = 'avc1.640028'; // Level 4.0
-            }
-            if (width * height > 2097152) { // > ~1920x1080
-                codecString = 'avc1.640033'; // Level 5.1
-            }
-            
-            console.log(`[WebCodecs] Using codec: H.264 (${codecString})`);
-            
-        // Track if we've sent decoderConfig yet
-        let decoderConfigSent = false;
-        let chunkCount = 0;
-        
-        // Create encoder
-        const encoder = new VideoEncoder({
-            output: async (chunk, metadata) => {
-                // Copy chunk data to array buffer
-                const buffer = new ArrayBuffer(chunk.byteLength);
-                chunk.copyTo(buffer);
 
-                chunkCount++;
-                
-                // Prepare metadata to send
-                let metaToSend = undefined;
-                
-                // If this is the first chunk or we have new metadata, prepare decoderConfig
-                if (metadata && metadata.decoderConfig) {
-                    const dc = metadata.decoderConfig;
-                    const desc = dc.description ? Array.from(new Uint8Array(dc.description)) : undefined;
-                    // Provide sensible defaults for color space if missing
-                    const colorSpace = dc.colorSpace || {
-                        primaries: 'bt709',
-                        transfer: 'bt709',
-                        matrix: 'bt709',
-                        fullRange: false
-                    };
-                    metaToSend = {
-                        decoderConfig: {
-                            description: desc,
-                            codec: dc.codec || codecString,
-                            colorSpace: colorSpace
-                        }
-                    };
-                    decoderConfigSent = true;
-                    console.log('[WebCodecs] Sending decoderConfig with chunk', chunkCount);
-                } else if (chunkCount === 1 && !decoderConfigSent) {
-                    // First chunk but encoder didn't provide metadata - send minimal config
-                    console.warn('[WebCodecs] First chunk has no metadata, sending minimal decoderConfig');
-                    metaToSend = {
-                        decoderConfig: {
-                            codec: codecString,
-                            description: undefined,
-                            colorSpace: {
-                                primaries: 'bt709',
-                                transfer: 'bt709',
-                                matrix: 'bt709',
-                                fullRange: false
-                            }
-                        }
-                    };
-                    decoderConfigSent = true;
-                }
+        // Retry strategy: attempt original size and two scaled-down attempts if encoding errors occur
+        const codecCandidates = ['avc1.42E01E','avc1.4D401E','avc1.4D401F','avc1.640028','avc1.640033'];
+        const scaleAttempts = [1.0, 0.9, 0.8];
+        const minWidth = 320;
+        const minHeight = 240;
 
-                // Send to main process muxer
-                console.log(`[WebCodecs] Adding chunk ${chunkCount} ts=${chunk.timestamp} duration=${chunk.duration} meta=${metaToSend ? 'yes' : 'no'} codec=${metaToSend?.decoderConfig?.codec ?? 'n/a'}`);
+        const runAttempt = async (scale, codecChoice, bitrate = 8_000_000, hwAccel = 'prefer-hardware') => {
+            // Derive target width/height
+            let targetWidth = Math.max(minWidth, Math.floor(width * scale));
+            let targetHeight = Math.max(minHeight, Math.floor(height * scale));
+            if (targetWidth % 2 !== 0) targetWidth++;
+            if (targetHeight % 2 !== 0) targetHeight++;
+
+            console.log(`[WebCodecs] Attempting encode: codec=${codecChoice} scale=${scale} -> ${targetWidth}x${targetHeight} bitrate=${bitrate}`);
+
+            // Probe config when possible
+            if (typeof VideoEncoder.isConfigSupported === 'function') {
                 try {
-                    await window.electronAPI.addVideoChunk(
-                        muxerId,
-                        Array.from(new Uint8Array(buffer)), // Convert to array for IPC
-                        chunk.timestamp, // microseconds
-                        chunk.duration, // microseconds
-                        chunk.type === 'key',
-                        metaToSend
-                    );
-                } catch (err) {
-                    console.error('[WebCodecs] Failed to add chunk:', err);
+                    const support = await VideoEncoder.isConfigSupported({ codec: codecChoice, width: targetWidth, height: targetHeight, framerate: Math.round(fps) });
+                    if (!support || !support.supported) {
+                        console.warn('[WebCodecs] Probe rejected config:', codecChoice, targetWidth, targetHeight);
+                        throw new Error('Config not supported');
+                    }
+                } catch (e) {
+                    throw e;
                 }
-            },
-            error: (err) => {
-                console.error('[WebCodecs] Encoder error:', err);
-                reject(err);
             }
-        });
-            
-            // Configure encoder
-            encoder.configure({
-                codec: codecString,
-                width: width,
-                height: height,
-                bitrate: 8_000_000, // 8 Mbps
-                framerate: fps,
-                latencyMode: 'quality',
-                hardwareAcceleration: 'prefer-hardware'
-            });
-            
-            const encodeAllFrames = async () => {
-                const frameDuration = 1_000_000 / fps; // microseconds per frame
-                
-                for (let i = 0; i < this.frames.length; i++) {
-                    if (abortSignal?.aborted) {
-                        await encoder.flush();
-                        encoder.close();
-                        reject(new Error('Aborted by user'));
-                        return;
-                    }
-                    
-                    // Create VideoFrame from canvas
-                    const canvas = this.frames[i].canvas;
-                    const timestamp = Math.round(i * frameDuration);
-                    
-                    const frame = new VideoFrame(canvas, {
-                        timestamp: timestamp,
-                        duration: Math.round(frameDuration)
-                    });
-                    
-                    // Encode frame (keyframe every 2 seconds)
-                    const keyFrame = i % Math.max(1, Math.round(fps * 2)) === 0;
-                    encoder.encode(frame, { keyFrame: keyFrame });
-                    frame.close();
-                    
-                    // Update progress (map frame encoding to 0-90%, leave room for flush/finalize)
-                    if (progressCallback) {
-                        const progress = ((i + 1) / this.frames.length) * 90; // 0..90
-                        progressCallback(progress, `Encoding frame ${i + 1}/${this.frames.length}...`);
-                    }
-                    
-                    // Yield every 10 frames to keep UI responsive
-                    if (i % 10 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-                }
-                
-                // Flush encoder
-                console.log('[WebCodecs] Flushing encoder...');
-                if (progressCallback) progressCallback(95, 'Flushing encoder...');
-                await encoder.flush();
-                encoder.close();
-                
-                // Wait a moment for all chunks to be sent via IPC
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-                // Finalize muxer and get MP4 data
-                console.log('[WebCodecs] Finalizing MP4...');
-                if (progressCallback) progressCallback(98, 'Finalizing MP4...');
-                const { data } = await window.electronAPI.finalizeVideo(muxerId);
-                
-                // Convert base64 back to blob
-                const binaryString = atob(data);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                
-                const blob = new Blob([bytes], { type: 'video/mp4' });
-                
-                console.log(`[WebCodecs] Complete: ${blob.size} bytes, ${this.frames.length} frames at ${fps.toFixed(2)} fps`);
-                
-                // Log expected vs actual duration
-                const expectedDuration = this.frames.length / fps;
-                console.log(`[WebCodecs] Expected duration: ${expectedDuration.toFixed(2)}s`);
 
-                if (progressCallback) progressCallback(100, 'MP4 encoding complete');
-                
-                resolve(blob);
-            };
-            
-            encodeAllFrames().catch(reject);
-        });
+            // Create muxer for this attempt
+            const { muxerId } = await window.electronAPI.createVideoMuxer(targetWidth, targetHeight, Math.round(fps));
+            console.log(`[WebCodecs] Created muxer: ${muxerId} (frameRate=${Math.round(fps)})`);
+
+            return await new Promise(async (resolve, reject) => {
+                let decoderConfigSent = false;
+                let chunkCount = 0;
+                let lastAttemptedFrameIndex = -1;
+                let lastEncodedFrameIndex = -1;
+                let encoderActive = true;
+
+                const encoder = new VideoEncoder({
+                    output: async (chunk, metadata) => {
+                        const buffer = new ArrayBuffer(chunk.byteLength);
+                        chunk.copyTo(buffer);
+                        chunkCount++;
+
+                        let metaToSend = undefined;
+                        if (metadata && metadata.decoderConfig) {
+                            const dc = metadata.decoderConfig;
+                            const desc = dc.description ? Array.from(new Uint8Array(dc.description)) : undefined;
+                            const colorSpace = dc.colorSpace || { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false };
+                            metaToSend = { decoderConfig: { description: desc, codec: dc.codec || codecChoice, colorSpace } };
+                            decoderConfigSent = true;
+                            console.log('[WebCodecs] Sending decoderConfig with chunk', chunkCount);
+                        } else if (chunkCount === 1 && !decoderConfigSent) {
+                            console.warn('[WebCodecs] First chunk has no metadata, sending minimal decoderConfig');
+                            metaToSend = { decoderConfig: { codec: codecChoice, description: undefined, colorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false } } };
+                            decoderConfigSent = true;
+                        }
+
+                        console.log(`[WebCodecs] Adding chunk ${chunkCount} ts=${chunk.timestamp} duration=${chunk.duration} meta=${metaToSend ? 'yes' : 'no'} codec=${metaToSend?.decoderConfig?.codec ?? 'n/a'}`);
+                        try {
+                            await window.electronAPI.addVideoChunk(muxerId, Array.from(new Uint8Array(buffer)), chunk.timestamp, chunk.duration, chunk.type === 'key', metaToSend);
+                        } catch (err) {
+                            console.error('[WebCodecs] Failed to add chunk:', err);
+                        }
+                    },
+                    error: (err) => {
+                        const info = { message: err && err.message ? err.message : String(err), codec: codecChoice, target: `${targetWidth}x${targetHeight}`, framesTotal: this.frames.length, lastAttemptedFrameIndex, lastEncodedFrameIndex, fps, hwConcurrency: navigator.hardwareConcurrency || 'unknown', deviceMemory: navigator.deviceMemory || 'unknown' };
+                        console.error('[WebCodecs] Encoder error:', info);
+                        encoderActive = false;
+                        reject(new Error(`[WebCodecs] Encoder error: ${info.message} (codec=${info.codec}, target=${info.target}, lastAttempted=${info.lastAttemptedFrameIndex}, lastEncoded=${info.lastEncodedFrameIndex})`));
+                    }
+                });
+
+                // Configure encoder
+                try {
+                    encoder.configure({ codec: codecChoice, width: targetWidth, height: targetHeight, bitrate: bitrate, framerate: fps, latencyMode: 'quality', hardwareAcceleration: hwAccel });
+                } catch (e) {
+                    try { encoder.close(); } catch (ee) {}
+                    try { window.electronAPI.finalizeVideo(muxerId).catch(()=>{}); } catch (ee) {}
+                    return reject(e);
+                }
+
+                // Encode frames
+                (async () => {
+                    const frameDuration = 1_000_000 / fps;
+                    try {
+                        for (let i = 0; i < this.frames.length; i++) {
+                            if (!encoderActive) throw new Error('Encoder closed during encoding');
+                            if (abortSignal?.aborted) { await encoder.flush(); encoder.close(); return resolve(); }
+
+                            const canvas = this.frames[i].canvas;
+                            const timestamp = Math.round(i * frameDuration);
+
+                            // Draw scaled canvas
+                            let encodeCanvas = canvas;
+                            if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+                                const temp = document.createElement('canvas');
+                                temp.width = targetWidth; temp.height = targetHeight;
+                                const tctx = temp.getContext('2d'); tctx.clearRect(0,0,temp.width,temp.height);
+                                tctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, temp.width, temp.height);
+                                encodeCanvas = temp;
+                            }
+
+                            const frame = new VideoFrame(encodeCanvas, { timestamp, duration: Math.round(frameDuration) });
+                            const keyFrame = i % Math.max(1, Math.round(fps * 2)) === 0;
+                            lastAttemptedFrameIndex = i;
+                            try { encoder.encode(frame, { keyFrame }); lastEncodedFrameIndex = i; } catch (err) { frame.close(); encoder.close(); try { window.electronAPI.finalizeVideo(muxerId).catch(()=>{}); } catch (ee) {} throw err; }
+                            frame.close();
+
+                            if (progressCallback) progressCallback(((i+1)/this.frames.length)*90, `Encoding frame ${i+1}/${this.frames.length}...`);
+                            if (i % 10 === 0) await new Promise(r => setTimeout(r,0));
+                        }
+
+                        // Flush and finalize
+                        if (progressCallback) progressCallback(95, 'Flushing encoder...');
+                        await encoder.flush(); encoder.close();
+                        await new Promise(r => setTimeout(r,100));
+                        if (progressCallback) progressCallback(98, 'Finalizing MP4...');
+                        const { data } = await window.electronAPI.finalizeVideo(muxerId);
+
+                        const binaryString = atob(data); const bytes = new Uint8Array(binaryString.length);
+                        for (let j = 0; j < binaryString.length; j++) bytes[j] = binaryString.charCodeAt(j);
+                        const blob = new Blob([bytes], { type: 'video/mp4' });
+                        if (progressCallback) progressCallback(100, 'MP4 encoding complete');
+                        resolve(blob);
+                    } catch (err) {
+                        try { encoder.close(); } catch (ee) {}
+                        try { window.electronAPI.finalizeVideo(muxerId).catch(()=>{}); } catch (ee) {}
+                        reject(err);
+                    }
+                })();
+            });
+        };
+
+        // Try a sequence of attempts with scale and codec fallback
+        let lastErr = null;
+        for (const scale of scaleAttempts) {
+            for (const cand of codecCandidates) {
+                try {
+                    const bf = Math.round(8_000_000 * (scale === 1.0 ? 1.0 : 0.8));
+                    // If high profile codec, prefer hardware; for fallback codecs prefer software
+                    const hw = cand.startsWith('avc1.64') ? 'prefer-hardware' : 'prefer-software';
+                    const result = await runAttempt(scale, cand, bf, hw);
+                    console.log(`[WebCodecs] Successful attempt: codec=${cand} scale=${scale}`);
+                    return result;
+                } catch (e) {
+                    lastErr = e;
+                    console.warn(`[WebCodecs] Attempt failed (codec=${cand}, scale=${scale}):`, e && (e.message || e));
+                    // try next candidate/scale
+                }
+            }
+        }
+
+    // If we reach here, all attempts failed
+            throw lastErr || new Error('WebCodecs encoding failed after multiple attempts');
+        }
+    
+        /**
+         * Encode using MediaRecorder API (fallback)
+         */
+    async encodeVideoNode(format = 'mp4', progressCallback = null, abortSignal = null) {
+        console.log(`[ASCIIAnimationEncoder] Starting ${format.toUpperCase()} encoding via node-side ffmpeg`);
+        if (this.frames.length === 0) throw new Error('No frames to encode');
+
+        const width = this.frames[0].canvas.width;
+        const height = this.frames[0].canvas.height;
+
+        // Determine fps
+        let fps = this.options.frameRate;
+        if (!fps && this.frames.length > 1) {
+            const totalDelay = this.frames.reduce((sum, frame) => sum + (frame.delay || 100), 0);
+            const avgDelay = totalDelay / this.frames.length;
+            fps = Math.round((1000 / avgDelay) * 100) / 100;
+            console.log(`[Encoder] Calculated fps from frame delays: ${fps} fps (avg delay ${avgDelay.toFixed(2)}ms)`);
+        }
+        fps = fps || 24;
+
+        // Collect PNG data URLs from canvases
+        const framesData = [];
+        for (let i = 0; i < this.frames.length; i++) {
+            if (abortSignal?.aborted) throw new Error('Aborted by user');
+            let canvas = this.frames[i].canvas;
+
+            // Ensure even dimensions (libx264 requires width divisible by 2)
+            let usedCanvas = canvas;
+            let padded = false;
+            const evenWidth = canvas.width % 2 === 0 ? canvas.width : canvas.width + 1;
+            const evenHeight = canvas.height % 2 === 0 ? canvas.height : canvas.height + 1;
+            if (evenWidth !== canvas.width || evenHeight !== canvas.height) {
+                const temp = document.createElement('canvas');
+                temp.width = evenWidth;
+                temp.height = evenHeight;
+                const tctx = temp.getContext('2d');
+                // Fill transparent background
+                tctx.clearRect(0, 0, temp.width, temp.height);
+                tctx.drawImage(canvas, 0, 0);
+                usedCanvas = temp;
+                padded = true;
+            }
+
+            // Note: toDataURL is synchronous; for large frame sets this may be slow but it's reliable
+            // Use WebP frames when targeting WebM so webm-writer can accept data URLs directly
+            const dataUrl = (format === 'webm') ? usedCanvas.toDataURL('image/webp', 0.92) : usedCanvas.toDataURL('image/png');
+            framesData.push(dataUrl);
+            if (padded) console.log(`[Node Encoder] Padded frame ${i} to ${usedCanvas.width}x${usedCanvas.height}`);
+
+            if (progressCallback) progressCallback((i / this.frames.length) * 50, `Preparing frames... (${i+1}/${this.frames.length})`);
+            // Yield occasionally
+            if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+
+        // Send frames to main process ffmpeg encoder
+        try {
+            if (progressCallback) progressCallback(50, 'Sending frames to node encoder...');
+            const quality = this.options.quality || 23;
+            // Prefer webm-writer in node for WebM (frames -> webm-writer), otherwise fallback to ffmpeg
+            const api = window.electronAPI || {};
+            let res;
+            // Use the existing stream or file-based node encoders (ffmpeg) for all formats. WebM support removed.
+            if (typeof api.encodeFramesStream === 'function') {
+                console.log('[Node Encoder] Using stream-based encodeFramesStream');
+                res = await api.encodeFramesStream({ frames: framesData, width, height, fps, format, quality });
+            } else if (typeof api.encodeFramesNode === 'function') {
+                console.log('[Node Encoder] Using file-based encodeFramesNode');
+                res = await api.encodeFramesNode({ frames: framesData, width, height, fps, format, quality });
+            } else {
+                throw new Error('No node encoder available');
+            }
+            if (!res || !res.data) throw new Error('Node encoder returned no data');
+
+
+            const binaryString = atob(res.data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const mimeType = format === 'mp4' ? 'video/mp4' : 'video/webm';
+            const blob = new Blob([bytes], { type: mimeType });
+            if (progressCallback) progressCallback(100, 'Node-side encoding complete');
+
+            // Probe resulting blob duration to validate output integrity
+            try {
+                const url = URL.createObjectURL(blob);
+                const vb = document.createElement('video');
+                vb.preload = 'metadata';
+                vb.src = url;
+                await new Promise((resolve) => {
+                    let done = false;
+                    vb.onloadedmetadata = () => { if (!done) { done = true; resolve(); } };
+                    vb.onerror = () => { if (!done) { done = true; resolve(); } };
+                });
+                const duration = isFinite(vb.duration) ? vb.duration : null;
+                URL.revokeObjectURL(url);
+                if (duration === null || duration === 0 || !isFinite(duration)) {
+                    console.warn('[Node Encoder] Probed output duration invalid:', duration);
+                    // Notify user that output may be corrupted
+                    try { showToast('Warning: Encoded video has invalid duration — it may be corrupted', 'warning'); } catch (e) {}
+                } else {
+                    const expected = (this.frames.length / fps);
+                    const diff = Math.abs(duration - expected);
+                    if (diff > Math.max(0.5, expected * 0.05)) {
+                        console.warn(`[Node Encoder] Probed duration (${duration}) differs from expected (${expected})`);
+                        try { showToast('Note: Encoded video duration differs from expected — check output', 'info'); } catch (e) {}
+                    }
+                }
+            } catch (e) {
+                console.warn('[Node Encoder] Failed to probe output blob duration:', e);
+            }
+
+            try {
+                if (usedNodeWebmMuxer && format === 'webm' && typeof showToast === 'function') {
+                    showToast('WebM: encoded with node WebMWriter muxer', 'info');
+                } else if (format === 'webm' && typeof showToast === 'function') {
+                    showToast('WebM: encoded with ffmpeg (node)', 'info');
+                }
+            } catch (e) {}
+            return blob;
+        } catch (err) {
+            console.error('[Node Encoder] Failed:', err);
+            throw err;
+        }
     }
 
-    /**
-     * Encode using MediaRecorder API (fallback)
-     */
     async encodeVideoMediaRecorder(format = 'webm', progressCallback = null, abortSignal = null) {
         console.log(`[ASCIIAnimationEncoder] Starting ${format.toUpperCase()} encoding with MediaRecorder`);
         if (this.frames.length === 0) {
@@ -2302,6 +2404,9 @@ class ASCIIAnimationEncoder {
                     reject(new Error('Video encoding produced empty file'));
                     return;
                 }
+
+                // Optionally notify which encoder was used
+                try { if (format === 'webm' && typeof showToast === 'function') showToast('WebM: encoded with MediaRecorder', 'info'); } catch (e) {}
 
                 // Resolve immediately, but also probe the blob's metadata to validate duration
                 resolve(blob);

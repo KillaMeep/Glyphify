@@ -13,6 +13,7 @@ const state = {
     converter: null,
     animationEncoder: null, // For video/GIF animation export
     animationPlayer: null, // For playing animation preview
+    playbackLastFrameIndex: -1, // Last displayed frame index to avoid redundant updates
     progressStartTime: null,
     sourceFPS: 0,
     videoDuration: 0,
@@ -672,19 +673,23 @@ async function displayPreview(dataUrl, isVideo, isGif = false) {
 
 function syncAnimationToVideo() {
     if (!state.animationEncoder || !state.animationEncoder.frames) return;
-    
+
     const videoTime = elements.videoPreview.currentTime;
     const frameRate = state.animationEncoder.frameRate || state.sourceFPS || 10;
     const frameIndex = Math.floor(videoTime * frameRate);
     const frames = state.animationEncoder.frames;
-    
+
+    // If nothing changed since last rendered frame, skip DOM update
+    if (frameIndex === state.playbackLastFrameIndex) return;
+
     if (frameIndex >= 0 && frameIndex < frames.length) {
         const frame = frames[frameIndex];
         if (frame && frame.asciiResult) {
             elements.asciiOutput.innerHTML = state.converter.generateDisplayHTML(frame.asciiResult);
+            state.playbackLastFrameIndex = frameIndex;
         }
     }
-}
+} 
 
 function startAnimationPlayback() {
     if (!state.animationEncoder || !state.animationEncoder.frames || state.animationEncoder.frames.length === 0) {
@@ -698,8 +703,11 @@ function startAnimationPlayback() {
     stopAnimationPlayback();
     state.playbackRunning = true;
 
-    // If there's a video, sync with it using requestAnimationFrame for smooth updates
+    // If there's a video, sync with it using the most efficient API available
     if (state.currentType === 'video' && elements.videoPreview.src) {
+        // Reset last-frame tracker
+        state.playbackLastFrameIndex = -1;
+
         // Make sure video is playing
         if (elements.videoPreview.paused) {
             elements.videoPreview.play().catch(err => {
@@ -711,18 +719,51 @@ function startAnimationPlayback() {
             });
         }
 
-        // Use requestAnimationFrame for smooth 60fps updates, guard with playbackRunning
-        const syncLoop = () => {
-            if (!state.playbackRunning) return; // Stopped
+        const frames = state.animationEncoder.frames;
+        const frameRate = state.animationEncoder.frameRate || state.sourceFPS || 10;
 
-            syncAnimationToVideo();
+        // Prefer requestVideoFrameCallback when available - it fires only when a new video frame is presented
+        if (typeof elements.videoPreview.requestVideoFrameCallback === 'function') {
+            const videoFrameHandler = (now, metadata) => {
+                if (!state.playbackRunning) return;
+
+                const vFrameIndex = Math.floor(elements.videoPreview.currentTime * frameRate);
+                if (vFrameIndex !== state.playbackLastFrameIndex && vFrameIndex >= 0 && vFrameIndex < frames.length) {
+                    const frame = frames[vFrameIndex];
+                    if (frame && frame.asciiResult) {
+                        elements.asciiOutput.innerHTML = state.converter.generateDisplayHTML(frame.asciiResult);
+                        state.playbackLastFrameIndex = vFrameIndex;
+                    }
+                }
+
+                try { elements.videoPreview.requestVideoFrameCallback(videoFrameHandler); } catch (e) { /* ignore if API disappears */ }
+            };
+
+            try {
+                elements.videoPreview.requestVideoFrameCallback(videoFrameHandler);
+                console.log('[Animation] Started video-synced playback via requestVideoFrameCallback');
+                try { hidePlaybackFallback(); } catch (e) {}
+            } catch (e) {
+                console.warn('[Animation] requestVideoFrameCallback failed, falling back to rAF', e);
+                // Fallback to rAF loop guarded by last-frame check
+                const syncLoop = () => {
+                    if (!state.playbackRunning) return; // Stopped
+                    syncAnimationToVideo();
+                    state.animationPlayer = requestAnimationFrame(syncLoop);
+                };
+                state.animationPlayer = requestAnimationFrame(syncLoop);
+            }
+        } else {
+            // No requestVideoFrameCallback support - use rAF but skip redundant updates
+            const syncLoop = () => {
+                if (!state.playbackRunning) return; // Stopped
+                syncAnimationToVideo();
+                state.animationPlayer = requestAnimationFrame(syncLoop);
+            };
             state.animationPlayer = requestAnimationFrame(syncLoop);
-        };
-
-        state.animationPlayer = requestAnimationFrame(syncLoop);
-        console.log('[Animation] Started video-synced animation loop');
-        // Hide fallback indicator when video-synced playback is running
-        try { hidePlaybackFallback(); } catch (e) {}
+            console.log('[Animation] Started video-synced animation loop (rAF fallback)');
+            try { hidePlaybackFallback(); } catch (e) {}
+        }
     } else {
         startIndependentAnimationPlayback();
     }
@@ -739,6 +780,8 @@ function stopAnimationPlayback() {
     } catch (e) {
         console.warn('[Animation] Error stopping playback:', e);
     }
+    // Reset last-frame tracker so next playback starts clean
+    state.playbackLastFrameIndex = -1;
     console.log('[Animation] Playback stopped');
 }
 
@@ -751,6 +794,8 @@ function startIndependentAnimationPlayback() {
     // Stop any running playback loops and start a timer-based loop
     stopAnimationPlayback();
     state.playbackRunning = true;
+    // Reset last-frame tracker for independent playback
+    state.playbackLastFrameIndex = -1;
 
     let frameIndex = 0;
     const frames = state.animationEncoder.frames;
@@ -1966,76 +2011,9 @@ async function saveAsGIF() {
 }
 
 async function saveAsWebM() {
-    console.log('[Export] Starting WebM export');
-    if (!state.animationEncoder || state.animationEncoder.frames.length === 0) {
-        console.log('[Export] No animation data available');
-        showToast('No animation data. Convert the video first.', 'warning');
-        return;
-    }
-    
-    console.log(`[Export] Encoding ${state.animationEncoder.frames.length} frames to WebM`);
-    showLoading('Preparing to encode WebM...');
-    state.progressStartTime = performance.now();
-    
-    // Small delay to ensure loading overlay renders
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Create abort controller
-    state.abortController = new AbortController();
-    
-    try {
-        const blob = await state.animationEncoder.encodeWebM((progress, status) => {
-            if (state.abortController.signal.aborted) {
-                throw new Error('Aborted by user');
-            }
-            if (status) {
-                updateLoadingText(status);
-            }
-            if (progress !== null && progress !== undefined) {
-                updateProgressWithTime(progress, state.progressStartTime);
-            }
-        }, state.abortController.signal);
-        
-        updateLoadingText('Preparing file for save...');
-        updateProgressWithTime(100, state.progressStartTime);
-        
-        // Convert blob to base64
-        const reader = new FileReader();
-        const base64Promise = new Promise((resolve, reject) => {
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-        });
-        reader.readAsDataURL(blob);
-        const dataUrl = await base64Promise;
-        
-        const filters = [{ name: 'WebM Video', extensions: ['webm'] }];
-        const defaultPath = 'ascii-animation.webm';
-        
-        const filePath = await window.electronAPI.saveFile({ filters, defaultPath });
-        if (!filePath) {
-            hideLoading();
-            return;
-        }
-        
-        updateLoadingText('Saving file...');
-        const result = await window.electronAPI.writeFile(filePath, dataUrl, 'base64');
-        
-        hideLoading();
-        
-        if (result.success) {
-            console.log('[Export] WebM saved successfully');
-            showToast('Saved as WebM video', 'success');
-        } else {
-            console.error('[Export] Failed to save WebM');
-            showToast('Failed to save WebM', 'error');
-        }
-    } catch (error) {
-        console.error('[Export] WebM export error:', error);
-        hideLoading();
-        if (error.message !== 'Aborted by user') {
-            showToast('Failed to export WebM: ' + error.message, 'error');
-        }
-    }
+    console.log('[Export] WebM export requested but WebM support has been removed');
+    showToast('WebM export is no longer supported. Use MP4 or GIF instead.', 'warning');
+    return;
 }
 
 async function saveAsMP4() {
@@ -2074,13 +2052,15 @@ async function saveAsMP4() {
         
         // Determine actual format from blob type
         const isActuallyWebM = blob.type.includes('webm');
-        const extension = isActuallyWebM ? 'webm' : 'mp4';
-        const filterName = isActuallyWebM ? 'WebM Video' : 'MP4 Video';
-        
         if (isActuallyWebM) {
-            console.log('[Export] Browser does not support MP4 encoding, using WebM instead');
-            showToast('MP4 not supported by browser - saving as WebM', 'info');
+            // We no longer support WebM export — inform the user and abort
+            console.warn('[Export] MP4 encoding produced WebM fallback which is not supported');
+            showToast('MP4 encoding is not supported by your browser and automatic WebM fallback is disabled. Try exporting as GIF.', 'warning');
+            hideLoading();
+            return;
         }
+        const extension = 'mp4';
+        const filterName = 'MP4 Video';
         
         // Convert blob to base64
         const reader = new FileReader();
@@ -2116,7 +2096,13 @@ async function saveAsMP4() {
         console.error('[Export] MP4 export error:', error);
         hideLoading();
         if (error.message !== 'Aborted by user') {
-            showToast('Failed to export MP4: ' + error.message, 'error');
+            if (error.message && error.message.includes('MP4 export is not supported')) {
+                showToast('MP4 export requires a WebCodecs-enabled Electron build and mp4-muxer support. Try updating Electron or export as WebM.', 'warning');
+            } else if (error.message && (error.message.includes('Encoding error') || (error.name && error.name === 'DOMException'))) {
+                showToast('MP4 encoding failed (WebCodecs). Try lowering resolution or frame rate, or export as WebM.', 'warning');
+            } else {
+                showToast('Failed to export MP4: ' + error.message, 'error');
+            }
         }
     }
 }
@@ -2465,43 +2451,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function checkMP4Support() {
-    // Prefer the internal WebCodecs + mp4-muxer path when available (Electron)
+    // Strict policy: MP4 is only offered when WebCodecs + mp4-muxer are available (canonical path)
     const webcodecsAvailable = typeof window.VideoEncoder !== 'undefined';
     const hasMuxerAPI = typeof window.electronAPI?.createVideoMuxer === 'function' && typeof window.electronAPI?.finalizeVideo === 'function';
 
+    const saveFormatSelect = document.getElementById('saveFormatSelect');
+    const mp4Option = saveFormatSelect ? Array.from(saveFormatSelect.options).find(opt => opt.value === 'mp4') : null;
+
     if (webcodecsAvailable && hasMuxerAPI) {
         console.log('[App] MP4 encoding supported via WebCodecs + muxer (Electron native path)');
+        if (mp4Option) mp4Option.textContent = 'MP4 Video (.mp4)';
         return;
     }
 
-    // Fallback: check MediaRecorder support for MP4 in the browser
-    const mp4Types = [
-        'video/mp4;codecs=avc1.42E01E',
-        'video/mp4;codecs=h264',
-        'video/mp4'
-    ];
-    
-    const mp4Supported = mp4Types.some(type => {
-        try {
-            return MediaRecorder.isTypeSupported(type);
-        } catch (e) {
-            return false;
-        }
-    });
-    
-    if (!mp4Supported) {
-        console.warn('[App] MP4 encoding not supported by browser, will use WebM (browser fallback)');
-        
-        // Update the MP4 option in the dropdown to indicate WebM fallback
-        const saveFormatSelect = document.getElementById('saveFormatSelect');
-        if (saveFormatSelect) {
-            const mp4Option = Array.from(saveFormatSelect.options).find(opt => opt.value === 'mp4');
-            if (mp4Option) {
-                mp4Option.textContent = 'Video (.webm) - MP4 not supported in browser';
-            }
-        }
-    } else {
-        console.log('[App] MP4 encoding supported via MediaRecorder');
+    // Not supported: hide/disable MP4 option and show informational label
+    console.warn('[App] MP4 encoding not available (requires WebCodecs + mp4-muxer in Electron)');
+    if (mp4Option) {
+        mp4Option.disabled = true;
+        mp4Option.textContent = 'MP4 (requires WebCodecs+Electron)';
     }
 }
 

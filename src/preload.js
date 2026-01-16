@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Expose electron API to renderer
 contextBridge.exposeInMainWorld('electronAPI', {
     // Window controls
     minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
@@ -23,6 +24,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addVideoChunk: (muxerId, chunkData, timestamp, duration, isKeyFrame, meta) => 
         ipcRenderer.invoke('video:addChunk', { muxerId, chunkData, timestamp, duration, isKeyFrame, meta }),
     finalizeVideo: (muxerId) => ipcRenderer.invoke('video:finalize', { muxerId }),
+
+    // Node-side frame encoder (PNG frames -> ffmpeg -> video)
+    encodeFramesNode: (payload) => ipcRenderer.invoke('video:encodeFrames', payload),
+    encodeFramesStream: (payload) => ipcRenderer.invoke('video:encodeFramesStream', payload),
+
 
     // GIF encoding (via main process gifencoder)
     isGifEncoderAvailable: () => ipcRenderer.invoke('gif:available'),
@@ -60,3 +66,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Open external URLs in the user's default browser
     openExternal: (url) => ipcRenderer.invoke('open-external', url)
 });
+
+
