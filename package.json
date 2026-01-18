@@ -18,7 +18,7 @@
   "license": "MIT",
   "devDependencies": {
     "@capacitor/android": "^8.0.1",
-    "@capacitor/cli": "^7.4.5",
+    "@capacitor/cli": "^8.0.1",
     "@capacitor/core": "^8.0.1",
     "electron": "^28.1.0",
     "electron-builder": "^26.4.0"
