@@ -112,60 +112,10 @@ jobs:
           name: linux
           path: dist/**/*.AppImage
 
-  build-android:
-    name: Build (Android / APK)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - run: npm install
-
-      - name: Determine VERSION
-        id: version
-        shell: bash
-        run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            V=${{ github.event.inputs.tag }}
-            V=${V#v}
-          else
-            V="0.0.${{ github.run_number }}"
-          fi
-          echo "Determined VERSION=$V"
-          echo "VERSION=$V" >> $GITHUB_ENV
-          echo "version=$V" >> $GITHUB_OUTPUT
-
-      - name: Sync Capacitor
-        run: |
-          echo "Syncing Capacitor Android project..."
-          npx cap sync android
-
-      - name: Build Android APK
-        working-directory: android
-        run: |
-          echo "Building Android APK..."
-          chmod +x gradlew
-          ./gradlew assembleRelease
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android
-          path: android/app/build/outputs/apk/release/*.apk
-
   release:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     name: Create Release
-    needs: [build-windows, build-linux, build-android]
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Determine tag
@@ -231,16 +181,6 @@ jobs:
             echo "No AppImage found"
           fi
 
-          # Pick the first APK found
-          APK=$(find artifacts -type f -iname "*.apk" | head -n1 || true)
-          if [ -n "$APK" ]; then
-            echo "Using APK: $APK"
-            mkdir -p artifacts
-            mv "$APK" "artifacts/Glyphify.apk" || true
-          else
-            echo "No APK found"
-          fi
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -252,7 +192,6 @@ jobs:
           files: |
             artifacts/Glyphify.exe
             artifacts/Glyphify.AppImage
-            artifacts/Glyphify.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

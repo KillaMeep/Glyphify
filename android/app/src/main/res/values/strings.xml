@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Glyphify</string>
-    <string name="title_activity_main">Glyphify</string>
-    <string name="package_name">com.killameep.glyphify</string>
-    <string name="custom_url_scheme">com.killameep.glyphify</string>
-</resources>
