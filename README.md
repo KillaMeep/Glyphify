@@ -1,6 +1,6 @@
 # Glyphify
 
-A modern Electron desktop application for converting images and videos to ASCII art.
+Glyphify converts images and videos to ASCII art. It is a desktop app built with Electron.
 
 ![Glyphify](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Electron](https://img.shields.io/badge/electron-28.x-green.svg)
@@ -20,7 +20,7 @@ A modern Electron desktop application for converting images and videos to ASCII 
   - Braille patterns
   - Custom character sets
 - **Export Options**: Save as TXT, HTML, PNG, or animated GIF
-- **Themes**: Multiple themes to choose from
+- **Themes**: You can select from several themes
 
 ## Automatic Installation
 
@@ -39,21 +39,21 @@ A modern Electron desktop application for converting images and videos to ASCII 
 ### Setup
 
 ```bash
-# Clone or navigate to the project directory
+# If you already cloned the repository, move into its folder
 cd Glyphify
 
 # Install dependencies
 npm install
 
-# (If you pulled the latest changes) Install platform ffprobe binary dependency
-# required for the Node-side ffprobe fallback used for probing GIFs/videos
+# Run this only if you updated an existing clone.
+# It installs ffprobe-static, which Node uses to read GIF and video files.
 npm install ffprobe-static --save
 
 # Run the application
 npm start
 
-# Run in development mode with DevTools
-npm start
+# Run with DevTools open
+npm start -- --dev
 ```
 
 ## Building for Distribution
