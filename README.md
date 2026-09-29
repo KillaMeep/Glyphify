@@ -1,89 +1,145 @@
-# Glyphify
+<p align="center">
+  <img src="assets/logo.svg" width="96" height="96" alt="Glyphify logo">
+</p>
 
-Glyphify converts images and videos to ASCII art. It is a desktop app built with Electron.
+<h1 align="center">Glyphify</h1>
 
-![Glyphify](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![Electron](https://img.shields.io/badge/electron-28.x-green.svg)
-![License](https://img.shields.io/badge/license-MIT-yellow.svg)
+<p align="center">
+  A desktop app for turning images, GIFs and video into ASCII art.
+</p>
+
+<p align="center">
+  <a href="https://github.com/KillaMeep/Glyphify/releases/latest"><img src="https://img.shields.io/github/v/release/KillaMeep/Glyphify?label=release" alt="Latest release"></a>
+  <a href="https://github.com/KillaMeep/Glyphify/actions/workflows/build-and-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/KillaMeep/Glyphify/build-and-release.yml?branch=main&label=build" alt="Build status"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational" alt="Platforms">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/KillaMeep/Glyphify" alt="License: MIT"></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Glyphify converting an image to colored block-character art" width="900">
+</p>
+
+## Download
+
+| Platform | Package | Link |
+| --- | --- | --- |
+| Windows (x64) | NSIS installer | [Glyphify.exe](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.exe) |
+| Linux (x64) | AppImage | [Glyphify.AppImage](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.AppImage) |
+
+Both links download the newest release directly. On Linux, mark the AppImage as executable before running it:
+
+```bash
+chmod +x Glyphify.AppImage
+./Glyphify.AppImage
+```
+
+macOS builds are not published yet. You can run Glyphify on macOS from source (see [Building from source](#building-from-source)).
+
+Glyphify checks GitHub for newer releases and lets you know when one is available. You can also check manually from **Settings → Check for updates**.
 
 ## Features
 
-- **Image Conversion**: Convert PNG, JPG, GIF, WebP, and BMP images to ASCII art
-- **Video Conversion**: Convert MP4 and WebM videos to animated ASCII
-- **Multiple Output Modes**: Color and grayscale ASCII output
-- **Customizable Character Sets**:
-  - Standard (@%#*+=-:. )
-  - Detailed (70 characters)
-  - Block elements
-  - Simple (#.)
-  - Binary (01)
-  - Braille patterns
-  - Custom character sets
-- **Export Options**: Save as TXT, HTML, PNG, or animated GIF
-- **Themes**: You can select from several themes
-
-## Automatic Installation
-
-- [Download For Windows (EXE)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.exe)
-- [Download For Linux (AppImage)](https://github.com/KillaMeep/Glyphify/releases/latest/download/Glyphify.AppImage)
-
-> Note: These links point directly to the latest release assets, and will download the files immediately.
-
-## Manual Installation
-
-### Prerequisites
-
-- Node.js 24 or higher
-- npm or yarn
-
-### Setup
-
-```bash
-# If you already cloned the repository, move into its folder
-cd Glyphify
-
-# Install dependencies
-npm install
-
-# Run this only if you updated an existing clone.
-# It installs ffprobe-static, which Node uses to read GIF and video files.
-npm install ffprobe-static --save
-
-# Run the application
-npm start
-
-# Run with DevTools open
-npm start -- --dev
-```
-
-## Building for Distribution
-
-```bash
-# Build for Windows
-npm run build:win
-
-# Build for macOS
-npm run build:mac
-
-# Build for Linux
-npm run build:linux
-
-# Build for all platforms
-npm run build
-```
+- **Image input:** PNG, JPG, GIF, WebP and BMP.
+- **Video input:** MP4 and WebM play natively. Other containers such as MOV and AVI are decoded through the bundled FFmpeg.
+- **Seven character sets:** Standard, Detailed (70 characters), Block elements, Simple, Binary, Braille, and your own custom ramp.
+- **Color output:** 24-bit color or grayscale, with optional palette reduction to ANSI 256, ANSI 16, CGA or Game Boy.
+- **Adjustments:** output width, font size, line height, contrast, brightness, character inversion and background color, with a live preview.
+- **Animation:** GIFs and videos are converted frame by frame, at a frame rate you choose.
+- **Export:** plain text, standalone HTML, PNG (1× to 4× scale), animated GIF and MP4.
+- **Themes:** five dark themes (Graphite, Obsidian, Midnight, Forest and Amethyst) and a choice of monospace output fonts.
 
 ## Usage
 
-1. **Load an Image/Video**: Drag and drop a file onto the app, or click "Browse Files"
-2. **Adjust Settings**:
-   - Choose color or grayscale mode
-   - Select a character set
-   - Adjust width, font size, contrast, brightness
-   - Toggle character inversion
-   - Set background color
-3. **Convert**: Click "Convert to ASCII" or press Enter
-4. **Export**: Save your ASCII art as text, HTML, or image
+1. Drag a file onto the **Source** panel, or click **Browse files** (<kbd>Ctrl</kbd>+<kbd>O</kbd>).
+2. Adjust the style, size and tone in the **Options** panel. With live preview on, the output updates as you go.
+3. Click **Convert to ASCII** or press <kbd>Enter</kbd>.
+4. Choose a format in the **Output** panel and click **Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>), or copy the text to the clipboard.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a file |
+| <kbd>Enter</kbd> | Convert |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy the output as plain text |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the output |
+| <kbd>Esc</kbd> | Clear the current input |
+
+### Export formats
+
+| Format | Use it for |
+| --- | --- |
+| Text (`.txt`) | Terminals, code comments, chat. Carries no color. |
+| HTML (`.html`) | A self-contained page that keeps per-character color. |
+| Image (`.png`) | A rendered snapshot, scaled 1× to 4× (set in Settings). |
+| Animated GIF | Animated output from GIF or video input. |
+| Video (`.mp4`) | Longer animations, encoded with FFmpeg. |
+
+## Building from source
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 24 or later (the version CI uses)
+- npm
+- Git
+
+### Run in development
+
+```bash
+git clone https://github.com/KillaMeep/Glyphify.git
+cd Glyphify
+npm install
+npm start
+```
+
+To open Chromium DevTools alongside the app, run:
+
+```bash
+npm start -- --dev
+```
+
+### Package an installer
+
+Packaging uses [electron-builder](https://www.electron.build/) and writes to `dist/`.
+
+```bash
+npm run build:win     # Windows NSIS installer
+npm run build:linux   # Linux AppImage
+npm run build         # Default target for the current OS
+```
+
+Build each target on its own operating system, as CI does.
+
+## Project structure
+
+```text
+src/
+├── main.js                  Electron main process: window, dialogs, file I/O, FFmpeg encoding
+├── preload.js               Safe IPC bridge exposed to the renderer as window.electronAPI
+├── update-checker.js        Checks GitHub Releases for newer versions
+└── renderer/
+    ├── index.html           Application UI
+    ├── styles.css           Theme tokens and component styles
+    ├── renderer.js          UI state, settings and the conversion pipeline
+    ├── ascii-converter.js   Pixel-to-character mapping, color palettes, HTML/PNG output
+    └── *-worker.js          Web workers for frame extraction and GIF/video encoding
+assets/                      App icons and logo
+```
+
+## Releases
+
+Every push to `main` that touches the application source runs the [Build and Release](.github/workflows/build-and-release.yml) workflow. It builds the Windows installer and the Linux AppImage and publishes them as a GitHub release numbered `v0.0.<run>`. Only the three most recent releases are kept.
+
+You can also run the workflow manually. The optional `tag` input (for example `v1.2.0`) sets the version embedded in the built app.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Before opening a pull request:
+
+1. Run the app with `npm start` and exercise the part you changed, with both image and video input if relevant.
+2. Keep changes focused. Put UI styling in `styles.css` using the existing theme tokens rather than hard-coded colors.
+3. Describe what changed and how you tested it.
 
 ## License
 
-MIT License - See LICENSE file for details
+Released under the [MIT License](LICENSE).

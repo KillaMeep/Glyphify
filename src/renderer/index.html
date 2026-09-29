@@ -13,19 +13,19 @@
     <header class="title-bar" id="titleBar">
         <div class="title-bar-drag">
             <div class="app-icon">
-                <img src="../../assets/logo.svg" class="app-icon-img" alt="Glyphify">
+                <img src="../../assets/logo.svg" class="app-icon-img" alt="">
             </div>
             <span class="app-title">Glyphify</span>
         </div>
         <div class="window-controls">
-            <button class="window-btn" id="minimizeBtn" title="Minimize">
-                <svg viewBox="0 0 12 12"><rect y="5" width="12" height="2" fill="currentColor"/></svg>
+            <button class="window-btn" id="minimizeBtn" title="Minimize" aria-label="Minimize">
+                <svg viewBox="0 0 12 12"><rect y="5.25" width="12" height="1.5" fill="currentColor"/></svg>
             </button>
-            <button class="window-btn" id="maximizeBtn" title="Maximize">
-                <svg viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+            <button class="window-btn" id="maximizeBtn" title="Maximize" aria-label="Maximize">
+                <svg viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>
             </button>
-            <button class="window-btn close-btn" id="closeBtn" title="Close">
-                <svg viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
+            <button class="window-btn close-btn" id="closeBtn" title="Close" aria-label="Close">
+                <svg viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.25"/></svg>
             </button>
         </div>
     </header>
@@ -35,24 +35,25 @@
         <aside class="sidebar">
             <nav class="nav-tabs">
                 <button class="nav-tab active" data-tab="convert">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2"/>
-                        <path d="M9 9h6M9 12h6M9 15h4"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2"/>
+                        <path d="M8 9h8M8 12h5M8 15h7"/>
                     </svg>
                     <span>Convert</span>
                 </button>
                 <button class="nav-tab" data-tab="settings">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/>
+                        <circle cx="16" cy="6" r="2"/>
+                        <circle cx="10" cy="12" r="2"/>
+                        <circle cx="18" cy="18" r="2"/>
                     </svg>
                     <span>Settings</span>
                 </button>
-
                 <button class="nav-tab" data-tab="about">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 16v-4M12 8h.01"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M12 16v-5M12 8h.01"/>
                     </svg>
                     <span>About</span>
                 </button>
@@ -67,10 +68,10 @@
                     <!-- Input Panel -->
                     <div class="panel input-panel">
                         <div class="panel-header">
-                            <h2>Input</h2>
+                            <h2><span class="panel-index">01</span>Source</h2>
                             <div class="panel-actions">
-                                <button class="btn btn-secondary" id="clearInputBtn" title="Clear">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <button class="btn btn-secondary btn-icon" id="clearInputBtn" title="Clear (Esc)" aria-label="Clear input">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                         <path d="M18 6L6 18M6 6l12 12"/>
                                     </svg>
                                 </button>
@@ -78,13 +79,17 @@
                         </div>
                         <div class="drop-zone" id="dropZone">
                             <div class="drop-zone-content">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                                </svg>
-                                <p>Drop an image or video here</p>
-                                <span>or</span>
-                                <button class="btn btn-primary" id="browseBtn">Browse Files</button>
-                                <p class="supported-formats">PNG, JPG, GIF, WebP, BMP, MP4</p>
+                                <div class="drop-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                    </svg>
+                                </div>
+                                <p class="drop-title">Drop an image or video</p>
+                                <p class="drop-hint">or pick a file from your computer</p>
+                                <button class="btn btn-primary" id="browseBtn">Browse files</button>
+                                <div class="supported-formats" aria-label="Supported formats">
+                                    <span>PNG</span><span>JPG</span><span>GIF</span><span>WEBP</span><span>BMP</span><span>MP4</span><span>WEBM</span><span>MOV</span><span>AVI</span>
+                                </div>
                             </div>
                             <div class="preview-container hidden" id="previewContainer">
                                 <img id="imagePreview" class="media-preview hidden" alt="Preview">
@@ -93,7 +98,7 @@
 
                                 <!-- Playback fallback indicator shown when native playback is not available -->
                                 <div id="playbackFallback" class="fallback-indicator hidden" role="status" aria-live="polite">
-                                    <svg viewBox="0 0 24 24" class="fallback-icon" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" fill="currentColor" opacity="0.95"/></svg>
+                                    <svg viewBox="0 0 24 24" class="fallback-icon" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" fill="currentColor"/></svg>
                                     <span class="fallback-text">Video playback not supported — using extracted frames</span>
                                 </div>
                             </div>
@@ -103,151 +108,163 @@
                     <!-- Controls Panel -->
                     <div class="panel controls-panel">
                         <div class="panel-header">
-                            <h2>Options</h2>
+                            <h2><span class="panel-index">02</span>Options</h2>
                         </div>
                         <div class="controls-scroll">
-                            <!-- Output Mode -->
-                            <div class="control-group">
-                                <label class="control-label">Output Mode</label>
-                                <div class="toggle-group">
-                                    <button class="toggle-btn active" data-mode="color">Color</button>
-                                    <button class="toggle-btn" data-mode="grayscale">Grayscale</button>
-                                </div>
-                            </div>
-                            <!-- Color Palette (shown in color mode) -->
-                            <div class="control-group" id="colorPaletteGroup">
-                                <label class="control-label">Color Palette</label>
-                                <select class="select-input" id="colorPaletteSelect">
-                                    <option value="full">Full Color (24-bit)</option>
-                                    <option value="ansi256">ANSI 256 Colors (xterm)</option>
-                                    <option value="ansi16">ANSI 16 Colors (DOS)</option>
-                                    <option value="cga">CGA 16 Colors (Retro)</option>
-                                    <option value="gameboy">Game Boy (4 shades)</option>
-                                </select>
-                            </div>
-                            <!-- Character Set -->
-                            <div class="control-group">
-                                <label class="control-label">Character Set</label>
-                                <select class="select-input" id="charsetSelect">
-                                    <option value="standard">Standard (@%#*+=-:. )</option>
-                                    <option value="detailed">Detailed (70 chars)</option>
-                                    <option value="blocks">Block Elements (█▓▒░ )</option>
-                                    <option value="simple">Simple (#. )</option>
-                                    <option value="binary">Binary (01)</option>
-                                    <option value="braille">Braille Patterns</option>
-                                    <option value="custom">Custom...</option>
-                                </select>
-                                <input type="text" class="text-input hidden" id="customCharset" placeholder="Enter characters (dark to light)">
-                            </div>
+                            <div class="control-section">
+                                <h3 class="control-section-title">Style</h3>
 
-                            <!-- Width -->
-                            <div class="control-group">
-                                <label class="control-label">
-                                    Output Width
-                                    <span class="control-value" id="widthValue">100</span>
-                                </label>
-                                <input type="range" class="range-input" id="widthSlider" min="20" max="300" value="100">
-                                <div class="range-labels">
-                                    <span>20</span>
-                                    <span>300</span>
+                                <!-- Output Mode -->
+                                <div class="control-group">
+                                    <label class="control-label">Output mode</label>
+                                    <div class="toggle-group" role="group" aria-label="Output mode">
+                                        <button class="toggle-btn active" data-mode="color">Color</button>
+                                        <button class="toggle-btn" data-mode="grayscale">Grayscale</button>
+                                    </div>
+                                </div>
+
+                                <!-- Color Palette (shown in color mode) -->
+                                <div class="control-group" id="colorPaletteGroup">
+                                    <label class="control-label" for="colorPaletteSelect">Color palette</label>
+                                    <select class="select-input" id="colorPaletteSelect">
+                                        <option value="full">Full color (24-bit)</option>
+                                        <option value="ansi256">ANSI 256 (xterm)</option>
+                                        <option value="ansi16">ANSI 16 (DOS)</option>
+                                        <option value="cga">CGA 16 (retro)</option>
+                                        <option value="gameboy">Game Boy (4 shades)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Character Set -->
+                                <div class="control-group">
+                                    <label class="control-label" for="charsetSelect">Character set</label>
+                                    <select class="select-input" id="charsetSelect">
+                                        <option value="standard">Standard  @%#*+=-:.</option>
+                                        <option value="detailed">Detailed (70 chars)</option>
+                                        <option value="blocks">Blocks  █▓▒░</option>
+                                        <option value="simple">Simple  #.</option>
+                                        <option value="binary">Binary  01</option>
+                                        <option value="braille">Braille patterns</option>
+                                        <option value="custom">Custom…</option>
+                                    </select>
+                                    <input type="text" class="text-input hidden" id="customCharset" placeholder="Characters, dark → light" spellcheck="false">
                                 </div>
                             </div>
 
-                            <!-- Font Size -->
-                            <div class="control-group">
-                                <label class="control-label">
-                                    Font Size
-                                    <span class="control-value" id="fontSizeValue">10</span>px
-                                </label>
-                                <input type="range" class="range-input" id="fontSizeSlider" min="4" max="24" value="10">
+                            <div class="control-section">
+                                <h3 class="control-section-title">Size</h3>
+
+                                <!-- Width -->
+                                <div class="control-group">
+                                    <label class="control-label" for="widthSlider">
+                                        Width (columns)
+                                        <span class="control-value" id="widthValue">100</span>
+                                    </label>
+                                    <input type="range" class="range-input" id="widthSlider" min="20" max="300" value="100">
+                                    <div class="range-labels">
+                                        <span>20</span>
+                                        <span>300</span>
+                                    </div>
+                                </div>
+
+                                <!-- Font Size -->
+                                <div class="control-group">
+                                    <label class="control-label" for="fontSizeSlider">
+                                        Font size (px)
+                                        <span class="control-value" id="fontSizeValue">10</span>
+                                    </label>
+                                    <input type="range" class="range-input" id="fontSizeSlider" min="4" max="24" value="10">
+                                </div>
+
+                                <!-- Line Height -->
+                                <div class="control-group">
+                                    <label class="control-label" for="lineHeightSlider">
+                                        Line height
+                                        <span class="control-value" id="lineHeightValue">1.0</span>
+                                    </label>
+                                    <input type="range" class="range-input" id="lineHeightSlider" min="0.5" max="2" value="1" step="0.1">
+                                </div>
                             </div>
 
-                            <!-- Line Height -->
-                            <div class="control-group">
-                                <label class="control-label">
-                                    Line Height
-                                    <span class="control-value" id="lineHeightValue">1.0</span>
-                                </label>
-                                <input type="range" class="range-input" id="lineHeightSlider" min="0.5" max="2" value="1" step="0.1">
-                            </div>
+                            <div class="control-section">
+                                <h3 class="control-section-title">Adjust</h3>
 
-                            <!-- Contrast -->
-                            <div class="control-group">
-                                <label class="control-label">
-                                    Contrast
-                                    <span class="control-value" id="contrastValue">100</span>%
-                                </label>
-                                <input type="range" class="range-input" id="contrastSlider" min="50" max="200" value="100">
-                            </div>
+                                <!-- Contrast -->
+                                <div class="control-group">
+                                    <label class="control-label" for="contrastSlider">
+                                        Contrast (%)
+                                        <span class="control-value" id="contrastValue">100</span>
+                                    </label>
+                                    <input type="range" class="range-input" id="contrastSlider" min="50" max="200" value="100">
+                                </div>
 
-                            <!-- Brightness -->
-                            <div class="control-group">
-                                <label class="control-label">
-                                    Brightness
-                                    <span class="control-value" id="brightnessValue">100</span>%
-                                </label>
-                                <input type="range" class="range-input" id="brightnessSlider" min="50" max="200" value="100">
-                            </div>
+                                <!-- Brightness -->
+                                <div class="control-group">
+                                    <label class="control-label" for="brightnessSlider">
+                                        Brightness (%)
+                                        <span class="control-value" id="brightnessValue">100</span>
+                                    </label>
+                                    <input type="range" class="range-input" id="brightnessSlider" min="50" max="200" value="100">
+                                </div>
 
-                            <!-- Invert -->
-                            <div class="control-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="invertCheck">
-                                    <span class="checkbox-custom"></span>
-                                    Invert Characters
-                                </label>
-                            </div>
+                                <!-- Background -->
+                                <div class="control-group">
+                                    <label class="control-label" for="bgColorText">Background</label>
+                                    <div class="color-picker-row">
+                                        <input type="color" class="color-input" id="bgColorPicker" value="#0a0c0f" aria-label="Pick background color">
+                                        <input type="text" class="text-input color-text" id="bgColorText" value="#0a0c0f" spellcheck="false">
+                                    </div>
+                                </div>
 
-                            <!-- Background -->
-                            <div class="control-group">
-                                <label class="control-label">Background Color</label>
-                                <div class="color-picker-row">
-                                    <input type="color" class="color-input" id="bgColorPicker" value="#1a1a2e">
-                                    <input type="text" class="text-input color-text" id="bgColorText" value="#1a1a2e">
+                                <!-- Invert -->
+                                <div class="control-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="invertCheck">
+                                        <span class="checkbox-custom"></span>
+                                        Invert characters
+                                    </label>
                                 </div>
                             </div>
 
                             <!-- GIF Options (shown for GIF/video input) -->
-                            <div class="control-group gif-options hidden" id="gifOptions">
-                                <label class="control-label">Animation Options</label>
-                                <div class="sub-controls">
-                                    <div class="control-row">
-                                        <label>Frame Rate</label>
-                                        <input type="number" class="number-input" id="frameRate" value="10" min="1" max="30">
-                                        <span>fps</span>
+                            <div class="control-section gif-options hidden" id="gifOptions">
+                                <h3 class="control-section-title">Animation</h3>
+                                <div class="control-group">
+                                    <div class="sub-controls">
+                                        <div class="control-row">
+                                            <label for="frameRate">Frame rate</label>
+                                            <input type="number" class="number-input" id="frameRate" value="10" min="1" max="30">
+                                            <span>fps</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Convert Button -->
-                            <div class="control-group">
-                                <button class="btn btn-primary btn-large" id="convertBtn" disabled>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                                    </svg>
-                                    Convert to ASCII
-                                </button>
-                            </div>
+                        <!-- Convert Button -->
+                        <div class="controls-footer">
+                            <button class="btn btn-primary btn-large" id="convertBtn" disabled>
+                                Convert to ASCII
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M5 12h14M13 6l6 6-6 6"/>
+                                </svg>
+                            </button>
+                            <p class="hint">Press <kbd>Enter</kbd> to convert</p>
                         </div>
                     </div>
 
                     <!-- Output Panel -->
                     <div class="panel output-panel">
                         <div class="panel-header">
-                            <h2>Output</h2>
+                            <h2><span class="panel-index">03</span>Output</h2>
                             <div class="panel-actions">
-                                <button class="btn btn-secondary" id="copyBtn" title="Copy to Clipboard" disabled>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="9" y="9" width="13" height="13" rx="2"/>
-                                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                <button class="btn btn-secondary btn-icon" id="copyBtn" title="Copy text (Ctrl+C)" aria-label="Copy to clipboard" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="9" y="9" width="12" height="12" rx="2"/>
+                                        <path d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1"/>
                                     </svg>
                                 </button>
-                                <button class="btn btn-secondary" id="saveBtn" title="Save" disabled>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                                    </svg>
-                                </button>
-                                <select class="select-input" id="saveFormatSelect" disabled>
+                                <select class="select-input select-compact" id="saveFormatSelect" aria-label="Export format" disabled>
                                     <option value="txt">Text (.txt)</option>
                                     <option value="html">HTML (.html)</option>
                                     <option value="png">Image (.png)</option>
@@ -255,15 +272,25 @@
                                     <option value="mp4">Video (.mp4)</option>
                                     <option value="webm" disabled>Video (.webm — unsupported)</option>
                                 </select>
+                                <button class="btn btn-primary" id="saveBtn" title="Save (Ctrl+S)" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                    </svg>
+                                    Save
+                                </button>
                             </div>
                         </div>
                         <div class="output-container" id="outputContainer">
                             <div class="output-placeholder">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <path d="M7 7h.01M7 12h.01M7 17h.01M12 7h.01M12 12h.01M12 17h.01M17 7h.01M17 12h.01M17 17h.01"/>
-                                </svg>
-                                <p>ASCII output will appear here</p>
+<pre class="placeholder-art" aria-hidden="true">  .:=####=:.
+ :##=:..:=#:
+.##:
+:##.   :####
+.##:    .:##
+ :##=:..:=##
+  .:=####=:.</pre>
+                                <p>Nothing converted yet</p>
+                                <small>Load a source file and press Convert.</small>
                             </div>
                             <div class="ascii-output hidden" id="asciiOutput"></div>
                             <canvas class="hidden" id="outputCanvas"></canvas>
@@ -276,162 +303,171 @@
             <!-- Settings Tab -->
             <div class="tab-content" id="tab-settings">
                 <div class="settings-container">
-                    <h2>Settings</h2>
-                    
-                    <div class="settings-section">
-                        <h3>Appearance</h3>
-                        <div class="setting-item">
-                            <label>Theme</label>
-                            <select class="select-input" id="themeSelect">
-                                <option value="dark">Dark</option>
-                                <option value="darker">Darker</option>
-                                <option value="midnight">Midnight Blue</option>
-                                <option value="forest">Forest</option>
-                                <option value="purple">Purple Haze</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>Output Font</label>
-                            <select class="select-input" id="fontSelect">
-                                <option value="'Courier New', monospace">Courier New</option>
-                                <option value="'Consolas', monospace">Consolas</option>
-                                <option value="'Monaco', monospace">Monaco</option>
-                                <option value="'Fira Code', monospace">Fira Code</option>
-                                <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                            </select>
-                        </div>
-                    </div>
+                    <div class="settings-inner">
+                        <header class="page-header">
+                            <h2>Settings</h2>
+                            <p>Changes are saved automatically.</p>
+                        </header>
 
-                    <div class="settings-section">
-                        <h3>Performance</h3>
-                        <div class="setting-item">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="livePreviewCheck" checked>
-                                <span class="checkbox-custom"></span>
-                                Live Preview (may impact performance)
-                            </label>
+                        <div class="settings-section">
+                            <h3>Appearance</h3>
+                            <div class="setting-item">
+                                <label for="themeSelect">Theme</label>
+                                <select class="select-input" id="themeSelect">
+                                    <option value="dark">Graphite</option>
+                                    <option value="darker">Obsidian</option>
+                                    <option value="midnight">Midnight</option>
+                                    <option value="forest">Forest</option>
+                                    <option value="purple">Amethyst</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label for="fontSelect">Output font</label>
+                                <select class="select-input" id="fontSelect">
+                                    <option value="'Courier New', monospace">Courier New</option>
+                                    <option value="'Consolas', monospace">Consolas</option>
+                                    <option value="'Monaco', monospace">Monaco</option>
+                                    <option value="'Fira Code', monospace">Fira Code</option>
+                                    <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="setting-item">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="webWorkerCheck" checked>
-                                <span class="checkbox-custom"></span>
-                                Use Web Workers for conversion
-                            </label>
-                        </div>
-                        <div class="setting-item">
-                            <label>Preview Quality</label>
-                            <select class="select-input" id="previewQualitySelect">
-                                <option value="low">Low (faster)</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="high">High (slower)</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div class="settings-section">
-                        <h3>Default Values</h3>
-                        <div class="setting-item">
-                            <label>Default Width</label>
-                            <input type="number" class="number-input" id="defaultWidthInput" value="100" min="20" max="300">
+                        <div class="settings-section">
+                            <h3>Performance</h3>
+                            <div class="setting-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="livePreviewCheck" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Live preview (re-converts as you adjust; may be slower)
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="webWorkerCheck" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Use web workers for conversion
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <label for="previewQualitySelect">Preview quality</label>
+                                <select class="select-input" id="previewQualitySelect">
+                                    <option value="low">Low (faster)</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="high">High (slower)</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="setting-item">
-                            <label>Default Character Set</label>
-                            <select class="select-input" id="defaultCharsetSelect">
-                                <option value="standard">Standard</option>
-                                <option value="detailed">Detailed</option>
-                                <option value="blocks">Block Elements</option>
-                                <option value="simple">Simple</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>Default Output Mode</label>
-                            <select class="select-input" id="defaultModeSelect">
-                                <option value="color">Color</option>
-                                <option value="grayscale">Grayscale</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div class="settings-section">
-                        <h3>Export</h3>
-                        <div class="setting-item">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="includeStylesCheck" checked>
-                                <span class="checkbox-custom"></span>
-                                Include styles in HTML export
-                            </label>
+                        <div class="settings-section">
+                            <h3>Defaults</h3>
+                            <div class="setting-item">
+                                <label for="defaultWidthInput">Default width (columns)</label>
+                                <input type="number" class="number-input" id="defaultWidthInput" value="100" min="20" max="300">
+                            </div>
+                            <div class="setting-item">
+                                <label for="defaultCharsetSelect">Default character set</label>
+                                <select class="select-input" id="defaultCharsetSelect">
+                                    <option value="standard">Standard</option>
+                                    <option value="detailed">Detailed</option>
+                                    <option value="blocks">Blocks</option>
+                                    <option value="simple">Simple</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label for="defaultModeSelect">Default output mode</label>
+                                <select class="select-input" id="defaultModeSelect">
+                                    <option value="color">Color</option>
+                                    <option value="grayscale">Grayscale</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="setting-item">
-                            <label>PNG Scale Factor</label>
-                            <select class="select-input" id="pngScaleSelect">
-                                <option value="1">1x</option>
-                                <option value="2" selected>2x</option>
-                                <option value="3">3x</option>
-                                <option value="4">4x</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>GIF Quality</label>
-                            <select class="select-input" id="gifQualitySelect">
-                                <option value="1" selected>Best Quality (slower)</option>
-                                <option value="5">High Quality</option>
-                                <option value="10">Medium Quality</option>
-                                <option value="20">Low Quality (faster)</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div class="settings-actions">
-                        <span id="settingsSavedIndicator" class="saved-indicator" aria-live="polite" role="status" hidden>Saved</span>
-                        <button class="btn btn-secondary" id="resetSettingsBtn">Reset to Defaults</button>
-                        <button class="btn btn-primary" id="checkUpdatesBtn">Check for updates</button>
+                        <div class="settings-section">
+                            <h3>Export</h3>
+                            <div class="setting-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="includeStylesCheck" checked>
+                                    <span class="checkbox-custom"></span>
+                                    Include styles in HTML export
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <label for="pngScaleSelect">PNG scale factor</label>
+                                <select class="select-input" id="pngScaleSelect">
+                                    <option value="1">1×</option>
+                                    <option value="2" selected>2×</option>
+                                    <option value="3">3×</option>
+                                    <option value="4">4×</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label for="gifQualitySelect">GIF quality</label>
+                                <select class="select-input" id="gifQualitySelect">
+                                    <option value="1" selected>Best (slower)</option>
+                                    <option value="5">High</option>
+                                    <option value="10">Medium</option>
+                                    <option value="20">Low (faster)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="settings-actions">
+                            <span id="settingsSavedIndicator" class="saved-indicator" aria-live="polite" role="status" hidden>Saved</span>
+                            <button class="btn btn-secondary" id="resetSettingsBtn">Reset to defaults</button>
+                            <button class="btn btn-primary" id="checkUpdatesBtn">Check for updates</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-
-
             <!-- About Tab -->
             <div class="tab-content" id="tab-about">
                 <div class="about-container">
-                    <div class="about-header">
-                        <div class="about-logo">
-                            <img src="../../assets/logo.svg" class="about-logo-img" alt="Glyphify">
+                    <div class="about-inner">
+                        <div class="about-header">
+                            <div class="about-logo">
+                                <img src="../../assets/logo.svg" class="about-logo-img" alt="Glyphify logo">
+                            </div>
+                            <div>
+                                <h1>Glyphify</h1>
+                                <p class="about-tagline">Turn images and video into ASCII art.</p>
+                                <p class="version">Version —</p>
+                            </div>
                         </div>
-                        <h1>Glyphify</h1>
-                        <p class="version">Version 1.0.0</p>
-                    </div>
-                    
-                    <div class="about-content">
-                        <p>A modern desktop application for converting images and videos to ASCII art.</p>
-                        
-                        <h3>Features</h3>
-                        <ul>
-                            <li>Convert images (PNG, JPG, GIF, WebP, BMP) to ASCII</li>
-                            <li>Convert videos (MP4, WebM) to animated ASCII</li>
-                            <li>Multiple character sets and styles</li>
-                            <li>Color and grayscale output</li>
-                            <li>Export to TXT, HTML, PNG, or GIF</li>
-                            <li>Customizable appearance and settings</li>
-                            <li>Preset styles for quick conversion</li>
-                        </ul>
 
-                        <h3>Acknowledgments</h3>
-                        <p class="credits" style="display:flex;flex-direction:column;gap:6px;margin:0">
-                            <span style="display:flex;align-items:center;gap:8px">
-                                Made with ❤️ by
-                                <a href="https://github.com/KillaMeep" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="flex:0 0 16px"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38C13.71 14.53 16 11.54 16 8c0-4.42-3.58-8-8-8z"/></svg>
-                                    <span>KillaMeep</span>
+                        <div class="about-content">
+                            <h3>Features</h3>
+                            <ul class="feature-grid">
+                                <li><strong>Images</strong>PNG, JPG, GIF, WebP and BMP</li>
+                                <li><strong>Video</strong>MP4 and WebM, with an FFmpeg fallback for other containers</li>
+                                <li><strong>Character sets</strong>Six built-in sets, including blocks and Braille, plus your own</li>
+                                <li><strong>Color palettes</strong>24-bit, ANSI 256, ANSI 16, CGA and Game Boy</li>
+                                <li><strong>Export</strong>TXT, HTML, PNG, animated GIF and MP4</li>
+                                <li><strong>Themes</strong>Five dark themes and a choice of output fonts</li>
+                            </ul>
+
+                            <h3>Keyboard shortcuts</h3>
+                            <div class="shortcuts-list">
+                                <div class="shortcut"><span>Open a file</span><span><kbd>Ctrl</kbd> <kbd>O</kbd></span></div>
+                                <div class="shortcut"><span>Convert</span><kbd>Enter</kbd></div>
+                                <div class="shortcut"><span>Copy output as text</span><span><kbd>Ctrl</kbd> <kbd>C</kbd></span></div>
+                                <div class="shortcut"><span>Save output</span><span><kbd>Ctrl</kbd> <kbd>S</kbd></span></div>
+                                <div class="shortcut"><span>Clear input</span><kbd>Esc</kbd></div>
+                            </div>
+
+                            <h3>Credits</h3>
+                            <p class="credits">
+                                <a href="https://github.com/KillaMeep" target="_blank" rel="noopener noreferrer">
+                                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38C13.71 14.53 16 11.54 16 8c0-4.42-3.58-8-8-8z"/></svg>
+                                    <span>Made by KillaMeep</span>
                                 </a>
-                            </span>
-                            <span style="display:flex;align-items:center;gap:8px">
-                                <a href="https://github.com/KillaMeep/Glyphify" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="flex:0 0 16px"><path fill-rule="evenodd" d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5v11A1.5 1.5 0 0112.5 15h-9A1.5 1.5 0 012 13.5v-11zM4 4v8h8V4H4zM5 5h6v1H5V5z"/></svg>
-                                    <span>Project Repository</span>
+                                <a href="https://github.com/KillaMeep/Glyphify" target="_blank" rel="noopener noreferrer">
+                                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5v11A1.5 1.5 0 0112.5 15h-9A1.5 1.5 0 012 13.5v-11zM4 4v8h8V4H4zM5 5h6v1H5V5z"/></svg>
+                                    <span>Source on GitHub</span>
                                 </a>
-                            </span>
-                        </p>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -440,14 +476,14 @@
 
     <!-- Loading Overlay -->
     <div class="loading-overlay hidden" id="loadingOverlay">
-        <div class="loading-spinner">
+        <div class="loading-spinner" role="status" aria-live="polite">
             <div class="spinner"></div>
             <p id="loadingText">Converting...</p>
             <div class="progress-bar" id="progressBar">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
-            <p class="progress-time" id="progressTime" style="margin-top: 8px; font-size: 12px; opacity: 0.8;"></p>
-            <button class="btn btn-danger" id="abortBtn" style="margin-top: 15px;">Cancel</button>
+            <p class="progress-time" id="progressTime"></p>
+            <button class="btn btn-danger" id="abortBtn">Cancel</button>
         </div>
     </div>
 
