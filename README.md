@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Glyphify converting an image to colored block-character art" width="900">
+  <img src="docs/screenshot.png" alt="Glyphify converting a melting-skull illustration into block-character art" width="900">
 </p>
 
 ## Download
